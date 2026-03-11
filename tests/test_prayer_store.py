@@ -76,33 +76,68 @@ class TestAdd:
 # ── TestMarkAnswered ──────────────────────────────────────────────────────────
 
 class TestMarkAnswered:
-    async def test_mark_answered_returns_full_id(self, store):
+    async def test_mark_answered_returns_true_for_exact_id(self, store):
         await store.add(**_req(id="aaaa-1111-xxxx"))
-        result = await store.mark_answered("g1", "aaaa")
-        assert result == "aaaa-1111-xxxx"
+        result = await store.mark_answered("g1", "aaaa-1111-xxxx")
+        assert result is True
 
     async def test_mark_answered_removes_from_open_list(self, store):
         await store.add(**_req(id="aaaa-1111"))
-        await store.mark_answered("g1", "aaaa")
+        await store.mark_answered("g1", "aaaa-1111")
         rows = await store.list_open("g1")
         assert len(rows) == 0
 
-    async def test_mark_answered_no_match_returns_none(self, store):
+    async def test_mark_answered_no_match_returns_false(self, store):
         await store.add(**_req(id="aaaa-1111"))
-        result = await store.mark_answered("g1", "zzzz")
-        assert result is None
+        result = await store.mark_answered("g1", "zzzz-0000")
+        assert result is False
 
-    async def test_mark_answered_wrong_guild_returns_none(self, store):
+    async def test_mark_answered_wrong_guild_returns_false(self, store):
         await store.add(**_req(id="aaaa-1111", guild_id="g1"))
-        result = await store.mark_answered("g2", "aaaa")
-        assert result is None
+        result = await store.mark_answered("g2", "aaaa-1111")
+        assert result is False
 
-    async def test_already_answered_not_returned(self, store):
+    async def test_already_answered_returns_false(self, store):
         await store.add(**_req(id="aaaa-1111"))
-        await store.mark_answered("g1", "aaaa")
-        # Trying to answer again should return None
-        result = await store.mark_answered("g1", "aaaa")
-        assert result is None
+        await store.mark_answered("g1", "aaaa-1111")
+        result = await store.mark_answered("g1", "aaaa-1111")
+        assert result is False
+
+
+# ── TestFindMatches ───────────────────────────────────────────────────────────
+
+class TestFindMatches:
+    async def test_finds_all_prefix_matches_in_order(self, store):
+        await store.add(**_req(id="abcd-1111", request="First"))
+        await store.add(**_req(id="abcd-2222", request="Second"))
+
+        matches = await store.find_matches("g1", "abcd", answered=False)
+
+        assert [row["id"] for row in matches] == ["abcd-1111", "abcd-2222"]
+
+    async def test_filters_by_answered_status(self, store):
+        await store.add(**_req(id="abcd-1111"))
+        await store.mark_answered("g1", "abcd-1111")
+
+        open_matches = await store.find_matches("g1", "abcd", answered=False)
+        answered_matches = await store.find_matches("g1", "abcd", answered=True)
+
+        assert open_matches == []
+        assert [row["id"] for row in answered_matches] == ["abcd-1111"]
+
+    async def test_percent_is_treated_literally(self, store):
+        await store.add(**_req(id="abcd-1111"))
+
+        matches = await store.find_matches("g1", "%", answered=False)
+
+        assert matches == []
+
+    async def test_underscore_is_treated_literally(self, store):
+        await store.add(**_req(id="abcd-1111"))
+
+        matches = await store.find_matches("g1", "_", answered=False)
+
+        assert matches == []
 
 
 # ── TestDelete ────────────────────────────────────────────────────────────────
@@ -110,23 +145,23 @@ class TestMarkAnswered:
 class TestDelete:
     async def test_delete_returns_true_on_match(self, store):
         await store.add(**_req(id="bbbb-2222"))
-        deleted = await store.delete("g1", "bbbb")
+        deleted = await store.delete("g1", "bbbb-2222")
         assert deleted is True
 
     async def test_delete_removes_from_list(self, store):
         await store.add(**_req(id="bbbb-2222"))
-        await store.delete("g1", "bbbb")
+        await store.delete("g1", "bbbb-2222")
         rows = await store.list_open("g1")
         assert len(rows) == 0
 
     async def test_delete_no_match_returns_false(self, store):
-        deleted = await store.delete("g1", "zzzz")
+        deleted = await store.delete("g1", "zzzz-0000")
         assert deleted is False
 
     async def test_delete_only_affects_target(self, store):
         await store.add(**_req(id="aaaa-1111", request="Keep me"))
         await store.add(**_req(id="bbbb-2222", request="Delete me"))
-        await store.delete("g1", "bbbb")
+        await store.delete("g1", "bbbb-2222")
         rows = await store.list_open("g1")
         assert len(rows) == 1
         assert rows[0]["request"] == "Keep me"

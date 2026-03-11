@@ -115,12 +115,11 @@ class StreakStore:
         if self._ready:
             return
         async with self._init_lock:
-            if self._ready:
-                return
-            _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(_run_sync, _init)
-            self._ready = True
-            log.info("Streak DB ready at %s", _DB_PATH)
+            if not self._ready:
+                _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(_run_sync, _init)
+                self._ready = True
+                log.info("Streak DB ready at %s", _DB_PATH)
 
     async def get(self, user_id: str) -> dict | None:
         """

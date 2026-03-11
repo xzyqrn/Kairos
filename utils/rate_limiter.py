@@ -1,5 +1,5 @@
 """
-utils/rate_limiter.py — Cooldown helpers for Kairos slash commands.
+utils/rate_limiter.py — Cooldown helpers for Kairos commands and interactions.
 
 Usage in a cog:
     from utils.rate_limiter import cooldown, guild_rate_limit
@@ -9,12 +9,15 @@ Usage in a cog:
     @guild_rate_limit()         # per-guild global limit
     async def verse(self, interaction): ...
 
-All cooldowns are per-user per-guild (app_commands.BucketType.user).
+All slash-command cooldowns are per-user per-guild.
 If a user hits the limit they receive an ephemeral error message and
 the violation is logged.
 
 The guild rate limit uses a rolling-window token bucket (in-memory).
 It resets on bot restart, which is acceptable for an anti-abuse measure.
+
+For message listeners or UI component callbacks that bypass
+``app_commands.checks.cooldown``, use ``check_user_cooldown()`` directly.
 """
 
 from __future__ import annotations
@@ -33,18 +36,34 @@ log = logging.getLogger("kairos.rate_limiter")
 
 # ── Per-user cooldown table (seconds) ─────────────────────────────────────────
 COOLDOWNS: dict[str, float] = {
-    "verse":        15.0,
-    "devotion":     15.0,
-    "pray":         15.0,
-    "ask":          20.0,
-    "suggest":      20.0,
-    "advice":       20.0,
-    "quiz":         30.0,
-    "file_read":    30.0,
-    "file_ask":     30.0,
-    "howareyou":    60.0,
-    "pray_request": 120.0,
+    "verse":          15.0,
+    "devotion":       15.0,
+    "pray":           15.0,
+    "prayer":         15.0,  # used by bible.py @cooldown("prayer") on the /prayer command
+    "ask":            20.0,
+    "mention_chat":   20.0,
+    "suggest":        20.0,
+    "advice":         20.0,
+    "quiz":           30.0,
+    "dailyverse":     30.0,
+    "ai_test":        30.0,
+    "file_read":      30.0,
+    "file_ask":       30.0,
+    "howareyou":      60.0,
+    "mood_select":    60.0,
+    "sermon":         60.0,
+    "sermon_notes":   60.0,
+    "prayer_request": 120.0,
 }
+
+
+def format_cooldown_message(retry_after: float, *, action: str = "This action") -> str:
+    """Return a consistent human-readable cooldown message."""
+    retry_in = round(retry_after, 1)
+    return (
+        f"⏳ Slow down! {action} is on cooldown.\n"
+        f"Try again in **{retry_in}s**."
+    )
 
 
 def cooldown(command_key: str) -> Callable:
@@ -81,11 +100,7 @@ async def handle_cooldown_error(
     Returns True if the error was a cooldown (and was handled), False otherwise.
     """
     if isinstance(error, app_commands.CommandOnCooldown):
-        retry_in = round(error.retry_after, 1)
-        message = (
-            f"⏳ Slow down! This command is on cooldown.\n"
-            f"Try again in **{retry_in}s**."
-        )
+        message = format_cooldown_message(error.retry_after, action="This command")
         log.info(
             "Rate limit hit: user=%s guild=%s command=%s retry_after=%.1fs",
             getattr(interaction.user, "id", "?"),
@@ -98,10 +113,45 @@ async def handle_cooldown_error(
                 await interaction.followup.send(message, ephemeral=True)
             else:
                 await interaction.response.send_message(message, ephemeral=True)
-        except discord.HTTPException:
-            pass
+        except discord.HTTPException as exc:
+            log.warning("Failed to send cooldown message: %s", exc)
         return True
     return False
+
+
+# ── Per-user cooldown for non-slash interactions ─────────────────────────────
+
+# In-memory point-in-time cooldowns: {(command_key, guild_id, user_id): monotonic}
+_user_cooldown_times: dict[tuple[str, int, int], float] = {}
+_user_limit_lock = asyncio.Lock()
+
+
+async def check_user_cooldown(
+    command_key: str,
+    *,
+    guild_id: int | None,
+    user_id: int,
+) -> float | None:
+    """
+    Check and record a per-user cooldown for non-slash interactions.
+
+    Returns:
+        ``None`` if the action is allowed and the timestamp was recorded.
+        The number of seconds to wait if the cooldown is still active.
+    """
+    now = time.monotonic()
+    key = (command_key, guild_id or 0, user_id)
+    cooldown_seconds = COOLDOWNS.get(command_key, 15.0)
+
+    async with _user_limit_lock:
+        previous = _user_cooldown_times.get(key)
+        if previous is not None:
+            retry_after = (previous + cooldown_seconds) - now
+            if retry_after > 0:
+                return retry_after
+
+        _user_cooldown_times[key] = now
+        return None
 
 
 # ── Per-guild global rate limit ────────────────────────────────────────────────

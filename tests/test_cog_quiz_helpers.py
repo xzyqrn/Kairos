@@ -41,10 +41,18 @@ class TestParseQuestion:
 
     def test_all_required_keys_present(self):
         result = _parse_question(_make_raw())
+        assert result is not None
         assert set(result.keys()) == {"question", "options", "answer", "explanation"}
+        assert result["options"] == [
+            "A. Moses",
+            "B. Noah",
+            "C. Abraham",
+            "D. David",
+        ]
 
     def test_answer_normalised_to_uppercase(self):
         result = _parse_question(_make_raw(answer="b"))
+        assert result is not None
         assert result["answer"] == "B"
 
     def test_strips_markdown_code_fence(self):
@@ -89,6 +97,7 @@ class TestParseQuestion:
         result = _parse_question(raw)
         assert result is not None
         assert all(isinstance(o, str) for o in result["options"])
+        assert result["options"] == ["A. 1", "B. 2", "C. 3", "D. 4"]
 
     def test_json_with_surrounding_text(self):
         inner = json.dumps({
@@ -100,3 +109,45 @@ class TestParseQuestion:
         raw = f"Here is the question:\n{inner}\nHope you enjoy!"
         result = _parse_question(raw)
         assert result is not None
+
+    def test_accepts_correctly_labeled_options(self):
+        result = _parse_question(_make_raw(options=[
+            "A. Moses",
+            "B. Noah",
+            "C. Abraham",
+            "D. David",
+        ]))
+        assert result is not None
+        assert result["options"] == [
+            "A. Moses",
+            "B. Noah",
+            "C. Abraham",
+            "D. David",
+        ]
+
+    def test_rejects_mixed_labeled_and_unlabeled_options(self):
+        result = _parse_question(_make_raw(options=[
+            "A. Moses",
+            "Noah",
+            "Abraham",
+            "David",
+        ]))
+        assert result is None
+
+    def test_rejects_duplicate_labels(self):
+        result = _parse_question(_make_raw(options=[
+            "A. Moses",
+            "A. Noah",
+            "C. Abraham",
+            "D. David",
+        ]))
+        assert result is None
+
+    def test_rejects_out_of_order_labels(self):
+        result = _parse_question(_make_raw(options=[
+            "B. Noah",
+            "A. Moses",
+            "C. Abraham",
+            "D. David",
+        ]))
+        assert result is None

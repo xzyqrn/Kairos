@@ -18,7 +18,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from utils.ai_client import ai_client
-from utils.bible_api import fetch_verse
+from utils.bible_api import fetch_daily_verse, fetch_verse
 from utils.rate_limiter import cooldown, guild_rate_limit, handle_cooldown_error
 
 log = logging.getLogger("kairos.bible")
@@ -87,6 +87,11 @@ class Bible(commands.Cog):
                 f"❌ Could not find a verse for **{passage}**. Try a different reference.",
             )
             return
+        if bible_verse is None:
+            await interaction.followup.send(
+                f"❌ Could not find a verse for **{passage}**. Try a different reference.",
+            )
+            return
 
         # 2. AI explanation
         prompt = (
@@ -140,11 +145,12 @@ class Bible(commands.Cog):
 
         await interaction.response.defer()
 
+        version_name = os.getenv("BIBLE_VERSION_NAME", "NIV").strip()
         topic_clause = f" on the topic of **{topic}**" if topic.strip() else ""
         prompt = (
             f"Write a short daily devotional{topic_clause} for a young Christian (ages 13–25). "
             "Structure it as:\n"
-            "1. **Verse** — pick one relevant Bible verse (KJV) and quote it in full.\n"
+            f"1. **Verse** — pick one relevant Bible verse ({version_name}) and quote it in full.\n"
             "2. **Devotion** — 3–4 sentences of reflection connecting the verse to everyday life.\n"
             "3. **Prayer** — one short closing prayer sentence.\n"
             "Keep the total under 250 words. Use a warm, conversational tone."
@@ -228,6 +234,7 @@ class Bible(commands.Cog):
     # ── /dailyverse ───────────────────────────────────────────────────────────
 
     @app_commands.command(name="dailyverse", description="Get today's Bible verse of the day.")
+    @cooldown("dailyverse")
     @guild_rate_limit()
     async def dailyverse(self, interaction: discord.Interaction) -> None:
         """
@@ -246,7 +253,7 @@ class Bible(commands.Cog):
         await interaction.response.defer()
 
         try:
-            verse = await fetch_verse()  # no passage = today's fallback verse
+            verse = await fetch_daily_verse()
         except Exception as exc:
             log.warning("dailyverse fetch error: %s", exc)
             await interaction.followup.send("❌ Could not retrieve today's verse. Try again shortly.")

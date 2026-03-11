@@ -52,8 +52,9 @@ class ClaudeProvider(AIProvider):
 
         text_chunks: list[str] = []
         for block in response.content:
-            if getattr(block, "type", "") == "text" and getattr(block, "text", "").strip():
-                text_chunks.append(block.text.strip())
+            text = getattr(block, "text", None)
+            if getattr(block, "type", "") == "text" and isinstance(text, str) and text.strip():
+                text_chunks.append(text.strip())
 
         if not text_chunks:
             raise RuntimeError("Claude returned an empty response")

@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import TypedDict
 
 import discord
 from discord import app_commands
@@ -28,14 +28,61 @@ log = logging.getLogger("kairos.quiz")
 
 _QUIZ_TIMEOUT = 30  # seconds
 _POINTS_PER_CORRECT = 10
+_QUIZ_LETTERS = ("A", "B", "C", "D")
 
 
 # ── Question parsing ──────────────────────────────────────────────────────────
 
 _LETTER_PATTERN = re.compile(r"^[A-Da-d]$")
 
+_OPTION_PREFIX = re.compile(
+    r"^\s*(?:[\(\[]([A-D])[\)\]]|([A-D])[).:\]])\s*(.+?)\s*$",
+    re.IGNORECASE,
+)
 
-def _parse_question(raw: str) -> dict[str, Any] | None:
+
+class QuizQuestion(TypedDict):
+    question: str
+    options: list[str]
+    answer: str
+    explanation: str
+
+
+def _split_labeled_option(option: str) -> tuple[str, str] | None:
+    """Return a labeled option as ``(letter, text)`` when it uses an A-D prefix."""
+    m = _OPTION_PREFIX.match(option)
+    if m is None:
+        return None
+    letter = m.group(1) or m.group(2)
+    text = m.group(3).strip()
+    if not letter or not text:
+        return None
+    return (letter.upper(), text)
+
+
+def _canonicalize_options(options: list[object]) -> list[str] | None:
+    """Normalize options into `A. ...` through `D. ...`, rejecting mixed labeling."""
+    normalized = [str(option).strip() for option in options]
+    if any(not option for option in normalized):
+        return None
+
+    labeled = [_split_labeled_option(option) for option in normalized]
+    has_labels = [item is not None for item in labeled]
+
+    if all(has_labels):
+        letters = [item[0] for item in labeled if item is not None]
+        if letters != list(_QUIZ_LETTERS):
+            return None
+        texts = [item[1] for item in labeled if item is not None]
+        return [f"{letter}. {text}" for letter, text in zip(_QUIZ_LETTERS, texts, strict=True)]
+
+    if any(has_labels):
+        return None
+
+    return [f"{letter}. {text}" for letter, text in zip(_QUIZ_LETTERS, normalized, strict=True)]
+
+
+def _parse_question(raw: str) -> QuizQuestion | None:
     """
     Extract and validate a JSON quiz question block from an AI response string.
 
@@ -76,9 +123,13 @@ def _parse_question(raw: str) -> dict[str, Any] | None:
     if not _LETTER_PATTERN.match(answer):
         return None
 
+    canonical_options = _canonicalize_options(options)
+    if canonical_options is None:
+        return None
+
     return {
         "question": str(obj["question"]),
-        "options": [str(o) for o in options],
+        "options": canonical_options,
         "answer": answer,
         "explanation": str(obj["explanation"]),
     }
@@ -87,72 +138,73 @@ def _parse_question(raw: str) -> dict[str, Any] | None:
 # ── Answer buttons ────────────────────────────────────────────────────────────
 
 class QuizView(discord.ui.View):
-    LABELS = ["A", "B", "C", "D"]
+    LABELS = list(_QUIZ_LETTERS)
 
     def __init__(
         self,
-        question_data: dict[str, Any],
+        question_data: QuizQuestion,
         guild_id: str,
-        author_id: int,
-        cog: Quiz,
     ) -> None:
         super().__init__(timeout=_QUIZ_TIMEOUT)
         self.question_data = question_data
         self.guild_id = guild_id
-        self.author_id = author_id
-        self.cog = cog
         self.answered_users: set[int] = set()
         self.timed_out_flag = False
 
-        for _i, label in enumerate(self.LABELS):
-            btn = discord.ui.Button(
-                label=label,
-                style=discord.ButtonStyle.primary,
-                custom_id=label,
-                row=0,
-            )
-            btn.callback = self._make_callback(label)
-            self.add_item(btn)
-
-    def _make_callback(self, letter: str):
-        async def callback(interaction: discord.Interaction) -> None:
-            if interaction.user.id in self.answered_users:
-                await interaction.response.send_message(
-                    "You already answered this question!", ephemeral=True
-                )
-                return
-
-            self.answered_users.add(interaction.user.id)
-            correct_letter = self.question_data["answer"]
-            is_correct = letter.upper() == correct_letter
-
-            entry = await quiz_store.record_answer(
-                guild_id=self.guild_id,
-                user_id=str(interaction.user.id),
-                display_name=interaction.user.display_name,
-                correct=is_correct,
-            )
-
-            if is_correct:
-                msg = (
-                    f"✅ **Correct, {interaction.user.display_name}!** +{_POINTS_PER_CORRECT} pts "
-                    f"(Total: {entry['score']})\n\n"
-                    f"📖 {self.question_data['explanation']}"
-                )
-            else:
-                msg = (
-                    f"❌ **Not quite, {interaction.user.display_name}.** "
-                    f"The answer was **{correct_letter}**.\n\n"
-                    f"📖 {self.question_data['explanation']}"
-                )
-
-            await interaction.response.send_message(msg[:2000], ephemeral=True)
-
-        return callback
+        for label in self.LABELS:
+            self.add_item(QuizAnswerButton(label))
 
     async def on_timeout(self) -> None:
         self.timed_out_flag = True
         self.stop()
+
+
+class QuizAnswerButton(discord.ui.Button[QuizView]):
+    def __init__(self, letter: str) -> None:
+        super().__init__(
+            label=letter,
+            style=discord.ButtonStyle.primary,
+            custom_id=letter,
+            row=0,
+        )
+        self.letter = letter
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if view is None:
+            return
+
+        if interaction.user.id in view.answered_users:
+            await interaction.response.send_message(
+                "You already answered this question!", ephemeral=True
+            )
+            return
+
+        view.answered_users.add(interaction.user.id)
+        correct_letter = view.question_data["answer"]
+        is_correct = self.letter.upper() == correct_letter
+
+        entry = await quiz_store.record_answer(
+            guild_id=view.guild_id,
+            user_id=str(interaction.user.id),
+            display_name=interaction.user.display_name,
+            correct=is_correct,
+        )
+
+        if is_correct:
+            msg = (
+                f"✅ **Correct, {interaction.user.display_name}!** +{_POINTS_PER_CORRECT} pts "
+                f"(Total: {entry['score']})\n\n"
+                f"📖 {view.question_data['explanation']}"
+            )
+        else:
+            msg = (
+                f"❌ **Not quite, {interaction.user.display_name}.** "
+                f"The answer was **{correct_letter}**.\n\n"
+                f"📖 {view.question_data['explanation']}"
+            )
+
+        await interaction.response.send_message(msg[:2000], ephemeral=True)
 
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
@@ -225,11 +277,9 @@ class Quiz(commands.Cog):
         view = QuizView(
             question_data=q,
             guild_id=str(interaction.guild_id),
-            author_id=interaction.user.id,
-            cog=self,
         )
 
-        msg = await interaction.followup.send(embed=embed, view=view)
+        msg = await interaction.followup.send(embed=embed, view=view, wait=True)
 
         # Wait for the view to finish (timeout or all buttons exhausted)
         await view.wait()
@@ -240,8 +290,8 @@ class Quiz(commands.Cog):
             description=f"**{q['question']}**",
             color=discord.Color.green(),
         )
-        for option in q["options"]:
-            prefix = "✅ " if option.startswith(q["answer"]) else ""
+        for letter, option in zip(QuizView.LABELS, q["options"], strict=True):
+            prefix = "✅ " if letter == q["answer"] else ""
             reveal_embed.add_field(name="\u200b", value=f"{prefix}{option}", inline=False)
         reveal_embed.add_field(
             name="Answer",

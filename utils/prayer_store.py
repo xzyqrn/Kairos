@@ -13,7 +13,8 @@ Usage::
     await prayer_store.add(id=..., guild_id=..., user_id=..., request=...,
                            anonymous=True, timestamp=...)
     reqs = await prayer_store.list_open(guild_id="123")
-    matched = await prayer_store.mark_answered(guild_id="123", id_prefix="abcd1234")
+    matches = await prayer_store.find_matches(guild_id="123", id_prefix="abcd1234", answered=False)
+    matched = await prayer_store.mark_answered(guild_id="123", request_id="abcd1234-full")
 """
 
 from __future__ import annotations
@@ -88,49 +89,69 @@ def _list_open(conn: sqlite3.Connection, guild_id: str) -> list[dict]:
         """,
         (guild_id,),
     ).fetchall()
-    return [
-        {
-            "id": r["id"],
-            "guild_id": r["guild_id"],
-            "user_id": r["user_id"],
-            "request": r["request"],
-            "anonymous": bool(r["anonymous"]),
-            "timestamp": r["timestamp"],
-            "answered": bool(r["answered"]),
-        }
-        for r in rows
-    ]
+    return [_row_to_dict(row) for row in rows]
 
 
-def _mark_answered(conn: sqlite3.Connection, guild_id: str, id_prefix: str) -> str | None:
-    row = conn.execute(
-        """
-        SELECT id FROM prayer_requests
-        WHERE guild_id = ? AND id LIKE ? AND answered = 0
-        LIMIT 1
-        """,
-        (guild_id, id_prefix.strip() + "%"),
-    ).fetchone()
-
-    if row is None:
-        return None
-
-    full_id = row["id"]
-    conn.execute(
-        "UPDATE prayer_requests SET answered = 1 WHERE id = ?",
-        (full_id,),
-    )
-    conn.commit()
-    return full_id
+def _row_to_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "guild_id": row["guild_id"],
+        "user_id": row["user_id"],
+        "request": row["request"],
+        "anonymous": bool(row["anonymous"]),
+        "timestamp": row["timestamp"],
+        "answered": bool(row["answered"]),
+    }
 
 
-def _delete(conn: sqlite3.Connection, guild_id: str, id_prefix: str) -> bool:
+def _escape_like(value: str) -> str:
+    """Escape SQLite LIKE wildcards so prefix matching stays literal."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _find_matches(
+    conn: sqlite3.Connection,
+    guild_id: str,
+    id_prefix: str,
+    answered: bool | None,
+) -> list[dict]:
+    prefix = id_prefix.strip()
+    if not prefix:
+        return []
+
+    query = """
+        SELECT id, guild_id, user_id, request, anonymous, timestamp, answered
+        FROM prayer_requests
+        WHERE guild_id = ? AND id LIKE ? ESCAPE '\\'
+    """
+    params: list[str | int] = [guild_id, _escape_like(prefix) + "%"]
+    if answered is not None:
+        query += " AND answered = ?"
+        params.append(1 if answered else 0)
+    query += " ORDER BY rowid ASC"
+
+    rows = conn.execute(query, tuple(params)).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
+def _mark_answered(conn: sqlite3.Connection, guild_id: str, request_id: str) -> bool:
     cur = conn.execute(
         """
-        DELETE FROM prayer_requests
-        WHERE guild_id = ? AND id LIKE ?
+        UPDATE prayer_requests
+        SET answered = 1
+        WHERE guild_id = ? AND id = ? AND answered = 0
         """,
-        (guild_id, id_prefix.strip() + "%"),
+        (guild_id, request_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def _delete(conn: sqlite3.Connection, guild_id: str, request_id: str) -> bool:
+    """Delete exactly one request identified by its full UUID."""
+    cur = conn.execute(
+        "DELETE FROM prayer_requests WHERE guild_id = ? AND id = ?",
+        (guild_id, request_id),
     )
     conn.commit()
     return cur.rowcount > 0
@@ -164,12 +185,11 @@ class PrayerStore:
         if self._ready:
             return
         async with self._init_lock:
-            if self._ready:
-                return
-            _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(_run_sync, _init)
-            self._ready = True
-            log.info("Prayer request DB ready at %s", _DB_PATH)
+            if not self._ready:
+                _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(_run_sync, _init)
+                self._ready = True
+                log.info("Prayer request DB ready at %s", _DB_PATH)
 
     async def add(
         self,
@@ -189,24 +209,30 @@ class PrayerStore:
         await self._ensure_ready()
         return await asyncio.to_thread(_run_sync, _list_open, guild_id)
 
-    async def mark_answered(self, guild_id: str, id_prefix: str) -> str | None:
+    async def find_matches(
+        self,
+        guild_id: str,
+        id_prefix: str,
+        answered: bool | None = None,
+    ) -> list[dict]:
         """
-        Mark the first matching open request as answered.
+        Return prayer requests in a guild whose IDs start with ``id_prefix``.
 
-        Matches by ``id LIKE '{id_prefix}%'`` within the guild.
-        Returns the full UUID if found and updated, or None if no match.
+        When ``answered`` is False, only open requests are returned. When True,
+        only answered requests are returned. When None, both are considered.
         """
         await self._ensure_ready()
-        return await asyncio.to_thread(_run_sync, _mark_answered, guild_id, id_prefix)
+        return await asyncio.to_thread(_run_sync, _find_matches, guild_id, id_prefix, answered)
 
-    async def delete(self, guild_id: str, id_prefix: str) -> bool:
-        """
-        Delete the first matching prayer request in the guild.
-
-        Returns True if a row was deleted, False if no match.
-        """
+    async def mark_answered(self, guild_id: str, request_id: str) -> bool:
+        """Mark one exact open request as answered."""
         await self._ensure_ready()
-        return await asyncio.to_thread(_run_sync, _delete, guild_id, id_prefix)
+        return await asyncio.to_thread(_run_sync, _mark_answered, guild_id, request_id)
+
+    async def delete(self, guild_id: str, request_id: str) -> bool:
+        """Delete one exact prayer request in the guild."""
+        await self._ensure_ready()
+        return await asyncio.to_thread(_run_sync, _delete, guild_id, request_id)
 
     async def list_all_open_by_user(self) -> dict[str, list[str]]:
         """

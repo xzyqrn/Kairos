@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from utils.ai_client import SUPPORTED_TONES, ai_client, mask_api_key
+from utils.rate_limiter import cooldown, handle_cooldown_error
 
 PROVIDER_LABELS = {
     "claude": "Claude (Anthropic)",
@@ -18,13 +19,13 @@ PROVIDER_LABELS = {
 
 
 class AISetupModal(discord.ui.Modal, title="Kairos AI Setup"):
-    model_input = discord.ui.TextInput(
+    model_input: discord.ui.TextInput[AISetupModal] = discord.ui.TextInput(
         label="Model Name",
         placeholder="e.g., claude-haiku-4-5, gpt-4.1-mini, gemini-2.0-flash",
         max_length=120,
         required=True,
     )
-    api_key_input = discord.ui.TextInput(
+    api_key_input: discord.ui.TextInput[AISetupModal] = discord.ui.TextInput(
         label="API Key",
         placeholder="Paste the API key for the selected provider",
         max_length=300,
@@ -79,27 +80,37 @@ class AISetupModal(discord.ui.Modal, title="Kairos AI Setup"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-class AISetupView(discord.ui.View):
-    def __init__(self, requester_id: int) -> None:
-        super().__init__(timeout=180)
-        self.requester_id = requester_id
-
-        provider_options = [
+class ProviderSelect(discord.ui.Select["AISetupView"]):
+    def __init__(self) -> None:
+        options = [
             discord.SelectOption(label="Claude (Anthropic)", value="claude"),
             discord.SelectOption(label="Gemini (Google)", value="gemini"),
             discord.SelectOption(label="ChatGPT (OpenAI)", value="openai"),
             discord.SelectOption(label="OpenRouter", value="openrouter"),
             discord.SelectOption(label="Groq", value="groq"),
         ]
-
-        self.provider_select = discord.ui.Select(
+        super().__init__(
             placeholder="Select an AI provider",
             min_values=1,
             max_values=1,
-            options=provider_options,
+            options=options,
         )
-        self.provider_select.callback = self._on_provider_selected
-        self.add_item(self.provider_select)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if view is None:
+            return
+        provider = self.values[0]
+        await interaction.response.send_modal(
+            AISetupModal(provider=provider, requester_id=view.requester_id)
+        )
+
+
+class AISetupView(discord.ui.View):
+    def __init__(self, requester_id: int) -> None:
+        super().__init__(timeout=180)
+        self.requester_id = requester_id
+        self.add_item(ProviderSelect())
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.requester_id:
@@ -109,10 +120,6 @@ class AISetupView(discord.ui.View):
             )
             return False
         return True
-
-    async def _on_provider_selected(self, interaction: discord.Interaction) -> None:
-        provider = self.provider_select.values[0]
-        await interaction.response.send_modal(AISetupModal(provider=provider, requester_id=self.requester_id))
 
 
 class AIAdmin(commands.Cog):
@@ -183,6 +190,7 @@ class AIAdmin(commands.Cog):
 
     @app_commands.command(name="ai_test", description="Test AI provider with a one-line encouragement prompt")
     @app_commands.checks.has_permissions(administrator=True)
+    @cooldown("ai_test")
     async def ai_test(self, interaction: discord.Interaction) -> None:
         """Send a live test prompt to the configured AI provider and display the response.
 
@@ -266,6 +274,8 @@ class AIAdmin(commands.Cog):
         )
 
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        if await handle_cooldown_error(interaction, error):
+            return
         if isinstance(error, app_commands.MissingPermissions):
             message = "You need Administrator permission to use this command."
         else:

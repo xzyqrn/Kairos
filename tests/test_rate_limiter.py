@@ -21,6 +21,9 @@ from utils.rate_limiter import (
     GUILD_LIMIT_WINDOW_SECONDS,
     _check_guild_limit,
     _guild_request_times,
+    _user_cooldown_times,
+    check_user_cooldown,
+    format_cooldown_message,
     guild_rate_limit,
     handle_cooldown_error,
 )
@@ -29,10 +32,12 @@ from utils.rate_limiter import (
 
 @pytest.fixture(autouse=True)
 def reset_guild_times():
-    """Clear the in-memory guild request log before each test."""
+    """Clear the in-memory rate-limit state before each test."""
     _guild_request_times.clear()
+    _user_cooldown_times.clear()
     yield
     _guild_request_times.clear()
+    _user_cooldown_times.clear()
 
 
 def _make_interaction(guild_id: int = 100, response_done: bool = False) -> MagicMock:
@@ -65,6 +70,13 @@ class TestCooldownTable:
     def test_known_commands_present(self):
         for cmd in ("verse", "devotion", "ask", "quiz", "howareyou"):
             assert cmd in COOLDOWNS, f"'{cmd}' missing from COOLDOWNS"
+
+
+class TestFormatCooldownMessage:
+    def test_includes_action_and_retry_after(self):
+        message = format_cooldown_message(7.49, action="Kairos chat")
+        assert "Kairos chat" in message
+        assert "**7.5s**" in message
 
 
 # ── TestHandleCooldownError ───────────────────────────────────────────────────
@@ -102,6 +114,38 @@ class TestHandleCooldownError:
         )
         await handle_cooldown_error(interaction, error)
         interaction.followup.send.assert_called_once()
+
+
+class TestCheckUserCooldown:
+    async def test_first_request_allowed(self):
+        result = await check_user_cooldown("mention_chat", guild_id=100, user_id=42)
+        assert result is None
+
+    async def test_same_user_same_command_is_blocked(self):
+        assert await check_user_cooldown("mention_chat", guild_id=100, user_id=42) is None
+        result = await check_user_cooldown("mention_chat", guild_id=100, user_id=42)
+        assert result is not None
+        assert result > 0
+
+    async def test_different_users_are_independent(self):
+        assert await check_user_cooldown("mention_chat", guild_id=100, user_id=42) is None
+        assert await check_user_cooldown("mention_chat", guild_id=100, user_id=43) is None
+
+    async def test_different_commands_are_independent(self):
+        assert await check_user_cooldown("mention_chat", guild_id=100, user_id=42) is None
+        assert await check_user_cooldown("mood_select", guild_id=100, user_id=42) is None
+
+    async def test_same_user_in_different_guilds_is_independent(self):
+        assert await check_user_cooldown("mention_chat", guild_id=100, user_id=42) is None
+        assert await check_user_cooldown("mention_chat", guild_id=101, user_id=42) is None
+
+    async def test_expired_timestamp_is_replaced(self):
+        import time
+
+        key = ("mention_chat", 100, 42)
+        _user_cooldown_times[key] = time.monotonic() - COOLDOWNS["mention_chat"] - 1
+        result = await check_user_cooldown("mention_chat", guild_id=100, user_id=42)
+        assert result is None
 
 
 # ── TestCheckGuildLimit ───────────────────────────────────────────────────────

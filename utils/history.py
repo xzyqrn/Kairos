@@ -135,12 +135,11 @@ class HistoryStore:
         if self._ready:
             return
         async with self._init_lock:
-            if self._ready:
-                return
-            _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(_run_sync, _init)
-            self._ready = True
-            log.info("Conversation history DB ready at %s", _DB_PATH)
+            if not self._ready:
+                _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(_run_sync, _init)
+                self._ready = True
+                log.info("Conversation history DB ready at %s", _DB_PATH)
 
     async def get(self, guild_id: str, user_id: str) -> list[dict[str, str]]:
         """Return recent messages for the (guild, user) pair, oldest-first."""

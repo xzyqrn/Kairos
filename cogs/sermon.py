@@ -11,27 +11,29 @@ Output includes: title, 3–5 key points, key verses, 3 follow-up readings, one 
 from __future__ import annotations
 
 import logging
+import os
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from utils.ai_client import ai_client
-from utils.rate_limiter import guild_rate_limit, handle_cooldown_error
+from utils.rate_limiter import cooldown, guild_rate_limit, handle_cooldown_error
 
 log = logging.getLogger("kairos.sermon")
 
 _ALLOWED_EXTENSIONS = {".txt", ".md"}
 _MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-_ROLE_NAMES = ("Youth Leader", "Admin", "Administrator")
+_ROLE_NAMES = {"youth leader", "admin", "administrator"}
 
 
 def _has_leader_role(interaction: discord.Interaction) -> bool:
-    if not hasattr(interaction.user, "roles"):
+    member = interaction.user if isinstance(interaction.user, discord.Member) else None
+    if member is None:
         return False
-    if interaction.user.guild_permissions.administrator:  # type: ignore[union-attr]
+    if member.guild_permissions.administrator:
         return True
-    return any(role.name in _ROLE_NAMES for role in interaction.user.roles)  # type: ignore[union-attr]
+    return any(role.name.lower() in _ROLE_NAMES for role in member.roles)
 
 
 class Sermon(commands.Cog):
@@ -42,6 +44,7 @@ class Sermon(commands.Cog):
 
     @app_commands.command(name="sermon", description="(Youth Leader/Admin) Generate a sermon outline on a topic.")
     @app_commands.describe(topic="The sermon topic, e.g. 'The parable of the prodigal son', 'Grace and mercy'")
+    @cooldown("sermon")
     @guild_rate_limit()
     async def sermon(self, interaction: discord.Interaction, topic: str) -> None:
         """
@@ -86,7 +89,7 @@ class Sermon(commands.Cog):
             "3. [Reference + one sentence why]\n\n"
             "**Discussion Question:** [One thought-provoking question for group discussion]\n\n"
             "**Closing:** [1-2 sentence altar call or challenge]\n\n"
-            "Keep the total under 600 words. Use KJV for all references."
+            f"Keep the total under 600 words. Use {os.getenv('BIBLE_VERSION_NAME', 'NIV').strip()} for all references."
         )
 
         try:
@@ -115,6 +118,7 @@ class Sermon(commands.Cog):
         description="(Youth Leader/Admin) Upload and AI-summarize your sermon notes (.txt or .md).",
     )
     @app_commands.describe(file="Your sermon notes file (.txt or .md, max 5MB)")
+    @cooldown("sermon_notes")
     @guild_rate_limit()
     async def sermon_notes(
         self, interaction: discord.Interaction, file: discord.Attachment

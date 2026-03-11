@@ -14,6 +14,7 @@ Commands:
 from __future__ import annotations
 
 import logging
+import os
 
 import discord
 from discord import app_commands
@@ -21,7 +22,13 @@ from discord.ext import commands
 
 from utils.ai_client import ai_client
 from utils.lang import set_user_lang
-from utils.rate_limiter import cooldown, guild_rate_limit, handle_cooldown_error
+from utils.rate_limiter import (
+    check_user_cooldown,
+    cooldown,
+    format_cooldown_message,
+    guild_rate_limit,
+    handle_cooldown_error,
+)
 
 log = logging.getLogger("kairos.suggestions")
 
@@ -54,6 +61,24 @@ class MoodSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        retry_after = await check_user_cooldown(
+            "mood_select",
+            guild_id=int(self.guild_id),
+            user_id=interaction.user.id,
+        )
+        if retry_after is not None:
+            log.info(
+                "Rate limit hit: user=%s guild=%s command=mood_select retry_after=%.1fs",
+                interaction.user.id,
+                self.guild_id,
+                retry_after,
+            )
+            await interaction.response.send_message(
+                format_cooldown_message(retry_after, action="This mood check"),
+                ephemeral=True,
+            )
+            return
+
         mood_context = self.values[0]
         await interaction.response.defer(ephemeral=True, thinking=True)
 
@@ -278,8 +303,6 @@ class Suggestions(commands.Cog):
 
         try:
             msg = await channel.send(embed=embed)
-            await msg.add_reaction("✅")
-            await msg.add_reaction("❌")
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ I don't have permission to post in **#suggestions-box**.", ephemeral=True
@@ -289,9 +312,17 @@ class Suggestions(commands.Cog):
             await interaction.response.send_message(f"❌ Failed to post: `{exc}`", ephemeral=True)
             return
 
+        # Confirm to the user first — add_reaction errors should not block this
         await interaction.response.send_message(
             f"✅ Your suggestion has been posted to {channel.mention}!", ephemeral=True
         )
+
+        # Reactions are best-effort; missing permission is non-fatal
+        try:
+            await msg.add_reaction("✅")
+            await msg.add_reaction("❌")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
 
     # ── /lang ─────────────────────────────────────────────────────────────────
 

@@ -4,7 +4,6 @@ cogs/moderation.py — Content moderation with a configurable blocklist.
 Behavior:
   - on_message listener checks all server messages against the blocklist
   - On match: silently delete the message + DM the user with community standards
-  - Log violation to #bot-logs (no public callout)
   - Blocklist is stored in memory; can be extended via data/blocklist.json if desired
 """
 
@@ -12,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from pathlib import Path
 
@@ -23,7 +21,6 @@ from discord.ext import commands
 log = logging.getLogger("kairos.moderation")
 
 _BLOCKLIST_PATH = Path(__file__).resolve().parent.parent / "data" / "blocklist.json"
-_BOT_LOGS_CHANNEL = os.getenv("BOT_LOGS_CHANNEL", "bot-logs")
 
 # Default blocklist — extend via data/blocklist.json
 _DEFAULT_BLOCKLIST: list[str] = [
@@ -70,31 +67,6 @@ class Moderation(commands.Cog):
     async def cog_load(self) -> None:
         self._blocklist = await _load_blocklist()
         log.info("Moderation blocklist loaded: %d word(s).", len(self._blocklist))
-
-    async def _log_violation(
-        self,
-        guild: discord.Guild,
-        user: discord.Member,
-        channel: discord.TextChannel,
-        matched_word: str,
-    ) -> None:
-        log_channel = discord.utils.get(guild.text_channels, name=_BOT_LOGS_CHANNEL)
-        if log_channel is None:
-            return
-
-        embed = discord.Embed(
-            title="🚨 Content Violation Detected",
-            color=discord.Color.red(),
-        )
-        embed.add_field(name="User", value=f"{user.display_name} ({user.id})", inline=True)
-        embed.add_field(name="Channel", value=f"#{channel.name}", inline=True)
-        embed.add_field(name="Matched Rule", value=f"`{matched_word}`", inline=True)
-        embed.set_footer(text="Message was silently deleted. No public callout.")
-
-        try:
-            await log_channel.send(embed=embed)
-        except (discord.Forbidden, discord.HTTPException) as exc:
-            log.warning("Failed to log violation to #%s: %s", _BOT_LOGS_CHANNEL, exc)
 
     async def _dm_user(self, user: discord.Member) -> None:
         embed = discord.Embed(
@@ -148,14 +120,7 @@ class Moderation(commands.Cog):
             matched,
         )
 
-        # DM the user and log to #bot-logs concurrently
         await self._dm_user(message.author)
-        await self._log_violation(
-            guild=message.guild,
-            user=message.author,
-            channel=message.channel,
-            matched_word=matched,
-        )
 
     @commands.Cog.listener()
     async def on_message_edit(self, _before: discord.Message, after: discord.Message) -> None:

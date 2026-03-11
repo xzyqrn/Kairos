@@ -12,6 +12,11 @@ from utils.providers.base import AIProvider
 class GeminiProvider(AIProvider):
     """Generate responses using the Google Gemini generative AI API."""
 
+    # Since google-generativeai uses a global `genai.configure`, we must use a
+    # lock to prevent multiple concurrent requests from overlapping and
+    # using the wrong API key.
+    _lock = asyncio.Lock()
+
     async def generate(
         self,
         *,
@@ -44,13 +49,15 @@ class GeminiProvider(AIProvider):
         except ImportError as exc:
             raise RuntimeError("google-generativeai package is not installed") from exc
 
-        genai.configure(api_key=api_key)
-        model_client = genai.GenerativeModel(model_name=model, system_instruction=system_prompt)
+        async with self._lock:
+            genai.configure(api_key=api_key)
+            model_client = genai.GenerativeModel(model_name=model, system_instruction=system_prompt)
+            response: object
 
-        if hasattr(model_client, "generate_content_async"):
-            response = await model_client.generate_content_async(prompt)
-        else:
-            response = await asyncio.to_thread(model_client.generate_content, prompt)
+            if hasattr(model_client, "generate_content_async"):
+                response = await model_client.generate_content_async(prompt)
+            else:
+                response = await asyncio.to_thread(lambda: model_client.generate_content(prompt))
 
         text = getattr(response, "text", None)
         if isinstance(text, str) and text.strip():

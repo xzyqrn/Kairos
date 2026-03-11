@@ -26,7 +26,8 @@ from discord.ext import commands
 
 log = logging.getLogger("kairos.journal")
 
-_JOURNAL_DIR = Path("data/journal")
+_ROOT = Path(__file__).resolve().parent.parent
+_JOURNAL_DIR = _ROOT / "data" / "journal"
 _PHT = datetime.timezone(datetime.timedelta(hours=8))
 _PAGE_SIZE = 3  # entries per page
 
@@ -112,7 +113,7 @@ def _build_journal_pages(entries: list[dict[str, Any]], display_name: str) -> li
         ]
 
     # Newest first
-    sorted_entries = sorted(entries, key=lambda e: e.get("id", 0), reverse=True)
+    sorted_entries = sorted(entries, key=lambda e: e.get("timestamp", ""), reverse=True)
     pages: list[discord.Embed] = []
     total_pages = (len(sorted_entries) + _PAGE_SIZE - 1) // _PAGE_SIZE
 
@@ -182,7 +183,7 @@ class Journal(commands.Cog):
             color=discord.Color.from_rgb(155, 89, 182),
         )
         embed.add_field(name="Entry #", value=str(new_id), inline=True)
-        embed.add_field(name="Date", value=now.strftime("%B %-d, %Y"), inline=True)
+        embed.add_field(name="Date", value=f"{now.strftime('%B')} {now.day}, {now.year}", inline=True)
         embed.set_footer(
             text=f"Total entries: {len(entries)} · Use /journal_view to read past entries · Only you can see this"
         )

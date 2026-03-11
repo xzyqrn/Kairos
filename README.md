@@ -21,7 +21,7 @@ and configurable multi-provider AI chat.
    `cp .env.example .env`
 4. Set required values in `.env`:
    - `DISCORD_TOKEN`
-   - Optional: `BIBLE_API_KEY`, `BIBLE_ID`, `DAILY_VERSE_CHANNEL`, `BOT_LOGS_CHANNEL`
+   - Optional: `BIBLE_API_KEY`, `BIBLE_ID`, `DAILY_VERSE_CHANNEL`
 5. Run the bot:
    `python main.py`
 

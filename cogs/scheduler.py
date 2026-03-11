@@ -14,13 +14,14 @@ from __future__ import annotations
 import datetime
 import logging
 import os
+from typing import Literal
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
 from utils.ai_client import ai_client
-from utils.bible_api import fetch_verse
+from utils.bible_api import fetch_daily_verse
 
 log = logging.getLogger("kairos.scheduler")
 
@@ -28,6 +29,7 @@ log = logging.getLogger("kairos.scheduler")
 _PHT = datetime.timezone(datetime.timedelta(hours=8))
 _DAILY_TIME = datetime.time(hour=7, minute=0, tzinfo=_PHT)
 _WEEKLY_TIME = datetime.time(hour=8, minute=0, tzinfo=_PHT)
+DailyVerseStatus = Literal["sent", "missing_channel", "fetch_failed", "send_failed"]
 
 
 class Scheduler(commands.Cog):
@@ -36,25 +38,25 @@ class Scheduler(commands.Cog):
         self._daily_task.start()
         self._weekly_task.start()
 
-    def cog_unload(self) -> None:
+    async def cog_unload(self) -> None:
         self._daily_task.cancel()
         self._weekly_task.cancel()
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    async def _post_daily_verse(self, guild: discord.Guild) -> None:
+    async def _post_daily_verse(self, guild: discord.Guild) -> DailyVerseStatus:
         """Post today's verse to #daily-verse in a single guild."""
         channel_name = os.getenv("DAILY_VERSE_CHANNEL", "daily-verse")
         channel = discord.utils.get(guild.text_channels, name=channel_name)
         if channel is None:
             log.warning("Guild '%s' has no #%s channel.", guild.name, channel_name)
-            return
+            return "missing_channel"
 
         try:
-            verse = await fetch_verse()
+            verse = await fetch_daily_verse()
         except Exception as exc:
             log.error("fetch_verse failed for daily task in guild %s: %s", guild.id, exc)
-            return
+            return "fetch_failed"
 
         embed = discord.Embed(
             title=f"🌅 Verse of the Day — {verse.reference}",
@@ -76,7 +78,8 @@ class Scheduler(commands.Cog):
             except RuntimeError as exc:
                 log.warning("AI reflection failed for daily verse guild %s: %s", guild.id, exc)
 
-        today = datetime.date.today().strftime("%A, %B %-d, %Y")
+        _today = datetime.datetime.now(_PHT).date()
+        today = f"{_today.strftime('%A, %B')} {_today.day}, {_today.year}"
         version_name = os.getenv("BIBLE_VERSION_NAME", "NIV").strip()
         ver = version_name if verse.source == "api" else "KJV"
         embed.set_footer(text=f"{today} · {ver}")
@@ -84,8 +87,10 @@ class Scheduler(commands.Cog):
         try:
             await channel.send(embed=embed)
             log.info("Daily verse posted to guild '%s' #%s", guild.name, channel_name)
+            return "sent"
         except discord.HTTPException as exc:
             log.error("Failed to send daily verse to guild %s: %s", guild.id, exc)
+            return "send_failed"
 
     async def _post_weekly_verse(self, guild: discord.Guild) -> None:
         """Post and pin the weekly verse in #announcements."""
@@ -100,7 +105,7 @@ class Scheduler(commands.Cog):
             return
 
         try:
-            verse = await fetch_verse()
+            verse = await fetch_daily_verse()
         except Exception as exc:
             log.error("fetch_verse failed for weekly task in guild %s: %s", guild.id, exc)
             return
@@ -138,7 +143,8 @@ class Scheduler(commands.Cog):
             except RuntimeError as exc:
                 log.warning("AI reflection failed for weekly verse guild %s: %s", guild.id, exc)
 
-        week_label = datetime.date.today().strftime("Week of %B %-d, %Y")
+        _wday = datetime.datetime.now(_PHT).date()
+        week_label = f"Week of {_wday.strftime('%B')} {_wday.day}, {_wday.year}"
         version_name = os.getenv("BIBLE_VERSION_NAME", "NIV").strip()
         ver = version_name if verse.source == "api" else "KJV"
         embed.set_footer(text=f"{week_label} · {ver}")
@@ -197,8 +203,15 @@ class Scheduler(commands.Cog):
             return
 
         await interaction.response.defer(ephemeral=True)
-        await self._post_daily_verse(interaction.guild)
-        await interaction.followup.send("✅ Daily verse posted.", ephemeral=True)
+        status = await self._post_daily_verse(interaction.guild)
+        channel_name = os.getenv("DAILY_VERSE_CHANNEL", "daily-verse")
+        messages: dict[DailyVerseStatus, str] = {
+            "sent": "✅ Daily verse posted.",
+            "missing_channel": f"❌ Could not post: no #{channel_name} channel was found.",
+            "fetch_failed": "❌ Could not retrieve today's verse.",
+            "send_failed": "❌ Could not post today's verse. Check the bot permissions and try again.",
+        }
+        await interaction.followup.send(messages[status], ephemeral=True)
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

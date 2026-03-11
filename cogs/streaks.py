@@ -28,6 +28,12 @@ from utils.streak_store import streak_store
 log = logging.getLogger("kairos.streaks")
 
 _MILESTONES = {7, 30, 100}
+_PHT = datetime.timezone(datetime.timedelta(hours=8))
+
+
+def _pht_today(now: datetime.datetime | None = None) -> datetime.date:
+    current = now or datetime.datetime.now(_PHT)
+    return current.astimezone(_PHT).date()
 
 
 # ── Cog ───────────────────────────────────────────────────────────────────────
@@ -52,7 +58,8 @@ class Streaks(commands.Cog):
             The updated stats dict with keys: current_streak, longest_streak,
             total_devotions, last_date.
         """
-        today = datetime.date.today().isoformat()
+        today_date = _pht_today()
+        today = today_date.isoformat()
         entry = await streak_store.get(user_id) or {
             "current_streak": 0,
             "longest_streak": 0,
@@ -70,7 +77,7 @@ class Streaks(commands.Cog):
 
         if last_date_str is not None:
             last_date = datetime.date.fromisoformat(last_date_str)
-            delta = (datetime.date.today() - last_date).days
+            delta = (today_date - last_date).days
 
             if delta == 1:
                 # Consecutive day
@@ -155,7 +162,7 @@ class Streaks(commands.Cog):
 
         # Determine streak status
         if last_date != "—" and last_date is not None:
-            delta = (datetime.date.today() - datetime.date.fromisoformat(last_date)).days
+            delta = (_pht_today() - datetime.date.fromisoformat(last_date)).days
             if delta == 0:
                 status = "🔥 Active — you've already done your devotion today!"
             elif delta == 1:

@@ -15,7 +15,6 @@ Features:
 from __future__ import annotations
 
 import logging
-import os
 
 import discord
 from discord import app_commands
@@ -23,7 +22,13 @@ from discord.ext import commands
 
 from utils.ai_client import ai_client
 from utils.history import history_store
-from utils.rate_limiter import cooldown, guild_rate_limit, handle_cooldown_error
+from utils.rate_limiter import (
+    check_user_cooldown,
+    cooldown,
+    format_cooldown_message,
+    guild_rate_limit,
+    handle_cooldown_error,
+)
 
 log = logging.getLogger("kairos.chat")
 
@@ -105,7 +110,10 @@ class Chat(commands.Cog):
             return
 
         # ONLY respond if significantly mentioned
-        is_mention = self.bot.user in message.mentions  # type: ignore[operator]
+        bot_user = self.bot.user
+        if bot_user is None:
+            return
+        is_mention = bot_user in message.mentions
 
         if not is_mention:
             return
@@ -121,13 +129,30 @@ class Chat(commands.Cog):
 
         # Strip @mention from message content
         content = message.content
-        if self.bot.user:
-            content = content.replace(f"<@{self.bot.user.id}>", "").replace(
-                f"<@!{self.bot.user.id}>", ""
-            ).strip()
+        content = content.replace(f"<@{bot_user.id}>", "").replace(
+            f"<@!{bot_user.id}>", ""
+        ).strip()
 
         if not content:
             await message.reply("Yes? 😊 How can I help you today?", mention_author=False)
+            return
+
+        retry_after = await check_user_cooldown(
+            "mention_chat",
+            guild_id=message.guild.id,
+            user_id=message.author.id,
+        )
+        if retry_after is not None:
+            log.info(
+                "Rate limit hit: user=%s guild=%s command=mention_chat retry_after=%.1fs",
+                message.author.id,
+                message.guild.id,
+                retry_after,
+            )
+            await message.reply(
+                format_cooldown_message(retry_after, action="Kairos chat"),
+                mention_author=False,
+            )
             return
 
         async with message.channel.typing():

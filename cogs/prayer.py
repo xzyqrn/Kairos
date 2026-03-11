@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import re
 import uuid
 
 import discord
@@ -29,6 +30,7 @@ log = logging.getLogger("kairos.prayer")
 _PHT = datetime.timezone(datetime.timedelta(hours=8))
 _REMINDER_TIME = datetime.time(hour=9, minute=0, tzinfo=_PHT)
 _PAGE_SIZE = 5
+_REQUEST_ID_PREFIX = re.compile(r"^[0-9a-fA-F-]+$")
 
 
 # ── Paginator view ────────────────────────────────────────────────────────────
@@ -115,6 +117,10 @@ def _build_pages(requests: list[dict]) -> list[discord.Embed]:
     return pages
 
 
+def _is_valid_request_prefix(prefix: str) -> bool:
+    return bool(_REQUEST_ID_PREFIX.fullmatch(prefix))
+
+
 # ── Cog ───────────────────────────────────────────────────────────────────────
 
 class Prayer(commands.Cog):
@@ -122,8 +128,17 @@ class Prayer(commands.Cog):
         self.bot = bot
         self._reminder_task.start()
 
-    def cog_unload(self) -> None:
+    async def cog_unload(self) -> None:
         self._reminder_task.cancel()
+
+    @staticmethod
+    def _ambiguous_request_message(request_id: str, matches: list[dict]) -> str:
+        options = ", ".join(f"`{str(match.get('id', ''))[:8]}`" for match in matches[:5])
+        suffix = " ..." if len(matches) > 5 else ""
+        return (
+            f"❌ `{request_id}` matches multiple requests ({options}{suffix}). "
+            "Please use more characters."
+        )
 
     # ── /pray_request ─────────────────────────────────────────────────────────
 
@@ -216,24 +231,35 @@ class Prayer(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         guild_id = str(interaction.guild_id)
+        prefix = request_id.strip()
+        if not prefix:
+            await interaction.followup.send("❌ Request ID cannot be empty.", ephemeral=True)
+            return
+        if not _is_valid_request_prefix(prefix):
+            await interaction.followup.send(
+                "❌ Request ID can only contain hexadecimal characters and hyphens.",
+                ephemeral=True,
+            )
+            return
+
         is_admin = interaction.user.guild_permissions.administrator  # type: ignore[union-attr]
+        matches = await prayer_store.find_matches(guild_id, prefix, answered=False)
 
-        # Find the request first (to check ownership if not admin)
-        open_reqs = await prayer_store.list_open(guild_id)
-        target = next(
-            (
-                r for r in open_reqs
-                if str(r.get("id", "")).startswith(request_id.strip())
-            ),
-            None,
-        )
-
-        if target is None:
+        if not matches:
             await interaction.followup.send(
                 f"❌ No open request found with ID starting with `{request_id}`.",
                 ephemeral=True,
             )
             return
+
+        if len(matches) > 1:
+            await interaction.followup.send(
+                self._ambiguous_request_message(prefix, matches),
+                ephemeral=True,
+            )
+            return
+
+        target = matches[0]
 
         if not is_admin and str(target.get("user_id")) != str(interaction.user.id):
             await interaction.followup.send(
@@ -241,10 +267,16 @@ class Prayer(commands.Cog):
             )
             return
 
-        await prayer_store.mark_answered(guild_id, request_id.strip())
+        updated = await prayer_store.mark_answered(guild_id, str(target.get("id", "")))
+        if not updated:
+            await interaction.followup.send(
+                f"❌ No open request found with ID starting with `{request_id}`.",
+                ephemeral=True,
+            )
+            return
 
         await interaction.followup.send(
-            f"🎉 Praise God! Request `{request_id[:8]}` has been marked as answered. 🙌",
+            f"🎉 Praise God! Request `{str(target.get('id', ''))[:8]}` has been marked as answered. 🙌",
             ephemeral=True,
         )
 
@@ -269,7 +301,33 @@ class Prayer(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
 
-        deleted = await prayer_store.delete(str(interaction.guild_id), request_id.strip())
+        prefix = request_id.strip()
+        if not prefix:
+            await interaction.followup.send("❌ Request ID cannot be empty.", ephemeral=True)
+            return
+        if not _is_valid_request_prefix(prefix):
+            await interaction.followup.send(
+                "❌ Request ID can only contain hexadecimal characters and hyphens.",
+                ephemeral=True,
+            )
+            return
+
+        matches = await prayer_store.find_matches(str(interaction.guild_id), prefix)
+        if not matches:
+            await interaction.followup.send(
+                f"❌ No request found with ID starting with `{request_id}`.", ephemeral=True
+            )
+            return
+
+        if len(matches) > 1:
+            await interaction.followup.send(
+                self._ambiguous_request_message(prefix, matches),
+                ephemeral=True,
+            )
+            return
+
+        target = matches[0]
+        deleted = await prayer_store.delete(str(interaction.guild_id), str(target.get("id", "")))
 
         if not deleted:
             await interaction.followup.send(
@@ -278,7 +336,7 @@ class Prayer(commands.Cog):
             return
 
         await interaction.followup.send(
-            f"✅ Request `{request_id[:8]}` deleted.", ephemeral=True
+            f"✅ Request `{str(target.get('id', ''))[:8]}` deleted.", ephemeral=True
         )
 
     # ── Weekly DM reminder ────────────────────────────────────────────────────

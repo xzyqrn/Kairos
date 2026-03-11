@@ -21,7 +21,8 @@ import aiofiles
 
 log = logging.getLogger("kairos.lang")
 
-_LANG_PREFS_PATH = Path("data/lang_prefs.json")
+_ROOT = Path(__file__).resolve().parent.parent
+_LANG_PREFS_PATH = _ROOT / "data" / "lang_prefs.json"
 
 SUPPORTED_LANGS: list[str] = ["English", "Filipino"]
 

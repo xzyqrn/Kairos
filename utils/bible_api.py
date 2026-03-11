@@ -7,8 +7,8 @@ Fallback: 8 KJV verses cycling by date ordinal
 Usage:
     from utils.bible_api import fetch_verse
 
-    text = await fetch_verse("John 3:16")      # named passage
-    text = await fetch_verse()                  # today's verse (fallback list)
+    verse = await fetch_verse("John 3:16")      # named passage or None if lookup fails
+    verse = await fetch_verse()                  # today's verse (fallback list)
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ log = logging.getLogger("kairos.bible_api")
 # ── Config ─────────────────────────────────────────────────────────────────────
 _API_BASE = "https://api.scripture.api.bible/v1"
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
+_PHT = datetime.timezone(datetime.timedelta(hours=8))
 
 # ── Hardcoded fallback verses (KJV) ───────────────────────────────────────────
 _FALLBACK_VERSES: list[dict[str, str]] = [
@@ -86,24 +87,93 @@ class BibleVerse(NamedTuple):
     source: str  # "api" or "fallback"
 
 
-def _daily_fallback() -> BibleVerse:
-    """Cycle through the 8 fallback verses by date ordinal."""
-    index = datetime.date.today().toordinal() % len(_FALLBACK_VERSES)
+def _pht_today(now: datetime.datetime | None = None) -> datetime.date:
+    """Return today's date in PHT."""
+    current = now or datetime.datetime.now(_PHT)
+    return current.astimezone(_PHT).date()
+
+
+def _daily_index(on_date: datetime.date | None = None) -> int:
+    day = on_date or _pht_today()
+    return day.toordinal() % len(_FALLBACK_VERSES)
+
+
+def _daily_fallback(on_date: datetime.date | None = None) -> BibleVerse:
+    """Cycle through the 8 fallback verses by PHT calendar day."""
+    index = _daily_index(on_date)
     entry = _FALLBACK_VERSES[index]
     return BibleVerse(reference=entry["reference"], text=entry["text"], source="fallback")
 
 
-async def fetch_verse(passage: str | None = None) -> BibleVerse:
+async def _fetch_api_verse(
+    passage: str,
+    *,
+    api_key: str,
+    bible_id: str,
+) -> BibleVerse | None:
+    search_url = f"{_API_BASE}/bibles/{bible_id}/search"
+    headers: dict[str, str] = {"api-key": api_key}
+    params: dict[str, str] = {"query": passage, "limit": "1"}
+
+    try:
+        async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
+            async with session.get(search_url, headers=headers, params=params) as resp:
+                if resp.status != 200:
+                    body = (await resp.text())[:200]
+                    log.warning("Bible API returned HTTP %s for '%s': %s", resp.status, passage, body)
+                    return None
+
+                data = await resp.json()
+    except Exception as exc:
+        log.warning("Bible API error for '%s': %s", passage, exc)
+        return None
+
+    passages_list = data.get("data", {}).get("passages", [])
+    verses_list = data.get("data", {}).get("verses", [])
+
+    if passages_list:
+        item = passages_list[0]
+        raw_text = _strip_html(str(item.get("content", item.get("text", ""))))
+        reference = str(item.get("reference", passage))
+    elif verses_list:
+        item = verses_list[0]
+        raw_text = _strip_html(str(item.get("text", "")))
+        reference = str(item.get("reference", passage))
+    else:
+        log.info("Bible API found no results for '%s'.", passage)
+        return None
+
+    if not raw_text.strip():
+        return None
+
+    return BibleVerse(reference=reference, text=raw_text.strip(), source="api")
+
+
+async def fetch_daily_verse(on_date: datetime.date | None = None) -> BibleVerse:
+    """Fetch the curated daily verse for the given PHT calendar day."""
+    fallback = _daily_fallback(on_date)
+    api_key = os.getenv("BIBLE_API_KEY", "").strip()
+    bible_id = os.getenv("BIBLE_ID", "de4e12af7f28f599-02").strip()
+
+    if not api_key:
+        log.warning("BIBLE_API_KEY not set — using fallback daily verse.")
+        return fallback
+
+    api_verse = await _fetch_api_verse(fallback.reference, api_key=api_key, bible_id=bible_id)
+    return api_verse or fallback
+
+
+async def fetch_verse(passage: str | None = None) -> BibleVerse | None:
     """
     Fetch a verse by passage name, or today's verse if passage is None.
-
-    Always tries scripture.api.bible first; falls back to local list on any error.
 
     Args:
         passage: e.g. "John 3:16", "Psalm 23", "Romans 8:28"
 
     Returns:
-        BibleVerse(reference, text, source)
+        BibleVerse(reference, text, source) for a successful lookup.
+        When ``passage`` is None, today's fallback verse is returned.
+        When ``passage`` is provided but lookup fails, ``None`` is returned.
     """
     api_key = os.getenv("BIBLE_API_KEY", "").strip()
     bible_id = os.getenv("BIBLE_ID", "de4e12af7f28f599-02").strip()
@@ -113,47 +183,10 @@ async def fetch_verse(passage: str | None = None) -> BibleVerse:
         return _daily_fallback()
 
     if not api_key:
-        log.warning("BIBLE_API_KEY not set — using fallback verse.")
-        return _daily_fallback()
+        log.warning("BIBLE_API_KEY not set — cannot look up passage '%s'.", passage)
+        return None
 
-    search_url = f"{_API_BASE}/bibles/{bible_id}/search"
-    headers = {"api-key": api_key}
-    params = {"query": passage, "limit": 1}
-
-    try:
-        async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
-            async with session.get(search_url, headers=headers, params=params) as resp:
-                if resp.status != 200:
-                    body = (await resp.text())[:200]
-                    log.warning("Bible API returned HTTP %s for '%s': %s", resp.status, passage, body)
-                    return _daily_fallback()
-
-                data = await resp.json()
-
-        passages_list = data.get("data", {}).get("passages", [])
-        verses_list = data.get("data", {}).get("verses", [])
-
-        # Prefer passages > verses
-        if passages_list:
-            item = passages_list[0]
-            raw_text = _strip_html(str(item.get("content", item.get("text", ""))))
-            reference = str(item.get("reference", passage))
-        elif verses_list:
-            item = verses_list[0]
-            raw_text = _strip_html(str(item.get("text", "")))
-            reference = str(item.get("reference", passage))
-        else:
-            log.info("Bible API found no results for '%s', using fallback.", passage)
-            return _daily_fallback()
-
-        if not raw_text.strip():
-            return _daily_fallback()
-
-        return BibleVerse(reference=reference, text=raw_text.strip(), source="api")
-
-    except Exception as exc:
-        log.warning("Bible API error for '%s': %s — using fallback.", passage, exc)
-        return _daily_fallback()
+    return await _fetch_api_verse(passage, api_key=api_key, bible_id=bible_id)
 
 
 def _strip_html(text: str) -> str:
@@ -164,10 +197,10 @@ def _strip_html(text: str) -> str:
     return clean.strip()
 
 
-def get_fallback_verse(index: int | None = None) -> BibleVerse:
-    """Return a specific fallback verse by index, or today's by ordinal."""
+def get_fallback_verse(index: int | None = None, on_date: datetime.date | None = None) -> BibleVerse:
+    """Return a specific fallback verse by index, or today's by PHT date."""
     if index is not None:
         entry = _FALLBACK_VERSES[index % len(_FALLBACK_VERSES)]
     else:
-        entry = _FALLBACK_VERSES[datetime.date.today().toordinal() % len(_FALLBACK_VERSES)]
+        entry = _FALLBACK_VERSES[_daily_index(on_date)]
     return BibleVerse(reference=entry["reference"], text=entry["text"], source="fallback")

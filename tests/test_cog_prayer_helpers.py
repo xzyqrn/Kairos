@@ -48,18 +48,18 @@ class TestBuildPages:
 
     def test_anonymous_request_shown_anonymously(self):
         pages = _build_pages([_make_req(anonymous=True)])
-        field_value = pages[0].fields[0].value
+        field_value = pages[0].fields[0].value or ""
         assert "Anonymous" in field_value
         assert "@u1" not in field_value
 
     def test_non_anonymous_shows_mention(self):
         pages = _build_pages([_make_req(user_id="123456", anonymous=False)])
-        field_value = pages[0].fields[0].value
+        field_value = pages[0].fields[0].value or ""
         assert "<@123456>" in field_value
 
     def test_request_text_truncated_at_200_chars(self):
         long_req = "x" * 300
         pages = _build_pages([_make_req(request=long_req)])
-        field_value = pages[0].fields[0].value
+        field_value = pages[0].fields[0].value or ""
         # The value should contain at most 200 chars of the request
         assert "x" * 201 not in field_value

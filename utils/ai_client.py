@@ -266,9 +266,17 @@ def mask_api_key(api_key: str) -> str:
     clean = api_key.strip()
     if not clean:
         return "(empty)"
-    if len(clean) <= 8:
-        return f"{clean}..."
-    return f"{clean[:8]}..."
+    
+    # If key is very short, show very little
+    if len(clean) <= 4:
+        return f"{clean[0]}..." if len(clean) > 0 else "..."
+    
+    # Otherwise, show first 4 characters and some stars
+    show = min(4, len(clean) // 3)
+    if show < 4 and len(clean) > 8:
+        show = 4
+    
+    return f"{clean[:show]}****{clean[-2:] if len(clean) > 8 else ''}"
 
 
 ai_client = AIClient()
