@@ -106,3 +106,14 @@ If the bot does not come online:
 - check `journalctl -u kairos -n 100 --no-pager`
 - verify the bot has `MESSAGE CONTENT INTENT` enabled in the Discord Developer Portal
 - verify the bot was invited with `bot` and `applications.commands` scopes
+
+## Hardening
+
+After the bot is running, harden the VPS using:
+
+```bash
+cd /root/kairos-src
+bash scripts/harden_vps_ubuntu.sh deploy 22 /opt/kairos
+```
+
+Read the full checklist in [docs/vps-hardening.md](./vps-hardening.md).

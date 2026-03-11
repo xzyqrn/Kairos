@@ -60,6 +60,9 @@ sed \
   "${SERVICE_TEMPLATE}" > "${SERVICE_PATH}"
 
 chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
+if [[ -f "${APP_DIR}/.env" ]]; then
+  chmod 600 "${APP_DIR}/.env"
+fi
 chmod 640 "${SERVICE_PATH}"
 
 systemctl daemon-reload
