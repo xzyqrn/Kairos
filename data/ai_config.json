@@ -1,0 +1,10 @@
+{
+  "guild_1481212165967970367": {
+    "provider": "gemini",
+    "model": "gemini-3-flash-preview",
+    "api_key": "AIzaSyCBxfGMulz7vnynTu4Qm04zjnCq_L_YmH0",
+    "tone": "warm",
+    "set_by": "749596589483360266",
+    "set_at": "2026-03-11"
+  }
+}

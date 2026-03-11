@@ -1,0 +1,104 @@
+{
+    "_comment": "Kairos Bot — English locale strings. All prompt templates support Python .format(**vars) substitution.",
+    "moods": [
+        {
+            "emoji": "😊",
+            "label": "Happy / Grateful",
+            "context": "the user feels happy and grateful"
+        },
+        {
+            "emoji": "😰",
+            "label": "Anxious / Stressed",
+            "context": "the user is feeling anxious or stressed"
+        },
+        {
+            "emoji": "😢",
+            "label": "Sad / Lonely",
+            "context": "the user is feeling sad or lonely"
+        },
+        {
+            "emoji": "😠",
+            "label": "Angry / Frustrated",
+            "context": "the user is feeling angry or frustrated"
+        },
+        {
+            "emoji": "🌵",
+            "label": "Spiritually Dry",
+            "context": "the user is experiencing spiritual dryness or a dry season in their faith"
+        },
+        {
+            "emoji": "🤔",
+            "label": "Confused / Lost",
+            "context": "the user feels confused or spiritually lost"
+        }
+    ],
+    "prompts": {
+        "howareyou": "A young Christian (ages 13–25) is reaching out because {mood_context}.\nPlease respond with:\n1. **Verse** — one relevant Bible verse (from the version provided below), quoted in full.\n2. **Reflection** — exactly 2 sentences connecting the verse to how they feel.\n3. **Encouragement** — one concrete, actionable step they can take today.\nKeep the whole response under 200 words. Speak directly to them (use 'you').",
+        "suggest": "A young Christian wants practical biblical suggestions on: \"{topic}\".\nGive 3–5 numbered, actionable suggestions. Each suggestion should:\n- Start with a bold title (3–5 words)\n- Include 1–2 sentences of explanation\n- Reference at least one Bible verse\nKeep the total response under 400 words.",
+        "advice": "A young Christian is dealing with this situation: \"{situation}\".\nProvide compassionate, biblically-grounded advice:\n1. Acknowledge their feelings briefly (1 sentence)\n2. Give 2–3 pieces of practical advice rooted in Scripture\n3. End with a short prayer or encouraging verse\nKeep under 250 words. Speak directly to them.",
+        "verse": "The user asked about: \"{passage}\".\nHere is the relevant Bible verse:\n\n{reference}: {text}\n\nPlease: (1) briefly explain what this verse means in context, (2) share one practical takeaway for a young Christian today. Keep it under 200 words. Begin with the verse reference in bold.",
+        "devotion": "Write a short daily devotional{topic_clause} for a young Christian (ages 13–25). Structure it as:\n1. **Verse** — pick one relevant Bible verse and quote it in full.\n2. **Devotion** — 3–4 sentences of reflection connecting the verse to everyday life.\n3. **Prayer** — one short closing prayer sentence.\nKeep the total under 250 words. Use a warm, conversational tone.",
+        "pray": "Write a sincere, personal prayer for a young Christian about: \"{topic}\".\nThe prayer should:\n- Be addressed directly to God\n- Reference at least one Bible verse that is relevant\n- Be 4–6 sentences long\n- End with 'Amen.'\nDo not include any commentary — only the prayer itself.",
+        "dailyverse_reflection": "In 2 sentences, share an encouraging reflection on this verse for a young Christian:\n\"{reference}: {text}\"",
+        "ask": "{prompt}",
+        "sermon": "Write a structured sermon outline on the topic: \"{topic}\" for a Christian youth audience (ages 13–25).\nInclude:\n1. **Title** — a catchy, faith-based sermon title\n2. **Introduction** — 2–3 sentences to hook the audience\n3. **Main Points** — 3 points, each with a Bible verse and 2–3 sentences of explanation\n4. **Application** — one practical challenge for the youth\n5. **Closing Prayer** — 2–3 sentences\nKeep the total under 500 words."
+    },
+    "ui": {
+        "mood_placeholder": "How are you feeling right now?",
+        "howareyou_intro": "👋 Hey! Select how you're feeling below and Kairos will respond with a word for you. 💙",
+        "howareyou_embed_title": "💙 A Word for You",
+        "howareyou_embed_footer": "You selected: {label} · This message is only visible to you.",
+        "suggest_embed_title": "💡 Biblical Suggestions: {topic}",
+        "suggest_embed_footer": "Requested by {user}",
+        "advice_embed_title": "🕊️ Personal Advice",
+        "advice_embed_footer": "This message is only visible to you.",
+        "community_suggest_embed_title": "💬 Community Suggestion",
+        "community_suggest_embed_footer": "React with ✅ to support · ❌ to oppose",
+        "community_suggest_success": "✅ Your suggestion has been posted to {channel}!",
+        "community_suggest_no_channel": "❌ Could not find a **#suggestions-box** channel. Ask an admin to create it.",
+        "community_suggest_no_permission": "❌ I don't have permission to post in **#suggestions-box**.",
+        "lang_success": "✅ Language preference set to **{language}**. Kairos will now respond in your chosen language.",
+        "error_guild_only": "Use this inside a server.",
+        "error_ai_unavailable": "❌ Could not generate a response right now: `{error}`",
+        "error_generic": "❌ `{error}`"
+    },
+    "help": {
+        "embed_title": "📖 Kairos — Command Reference",
+        "embed_description": "A biblically-grounded AI assistant for your Christian youth community.",
+        "embed_footer": "Kairos — guided by faith, built for community 🕊️",
+        "fields": [
+            {
+                "name": "📖 Bible & Devotion",
+                "value": "`/verse [passage]` — Look up & explain a Bible verse\n`/devotion [topic]` — Get a daily devotional\n`/pray [topic]` — Personal prayer (private)\n`/dailyverse` — Today's verse of the day"
+            },
+            {
+                "name": "🙏 Prayer",
+                "value": "`/pray_request [request] [anonymous]` — Submit a prayer request\n`/pray_list` — View open requests\n`/pray_answered [id]` — Mark your request as answered\n`/pray_clear [id]` — Delete a request _(Admin)_"
+            },
+            {
+                "name": "🧠 Quiz",
+                "value": "`/quiz` — Bible trivia (30s timer, +10 pts)\n`/quiz_leaderboard` — Top 10 scores\n`/quiz_reset` — Reset scores _(Admin)_"
+            },
+            {
+                "name": "💙 Mood & Advice",
+                "value": "`/howareyou` — Mood check-in with biblical response (private)\n`/suggest [topic]` — 3–5 practical biblical suggestions\n`/advice [situation]` — Personal advice (private)\n`/ask [question]` — Ask Kairos anything"
+            },
+            {
+                "name": "📝 Sermon & Study",
+                "value": "`/sermon [topic]` — Sermon outline _(Youth Leader / Admin)_\n`/sermon_notes [file]` — Summarize sermon notes _(Youth Leader / Admin)_"
+            },
+            {
+                "name": "🔥 Streaks & Journal",
+                "value": "`/mystats` — Your devotion streak & stats\n`/streaks` — Top 10 devotion streaks\n`/journal [entry]` — Write a private journal entry\n`/journal_view` — Read your past entries (private)"
+            },
+            {
+                "name": "📁 Files",
+                "value": "`/file_read [file]` — AI-summarize an uploaded file\n`/file_ask [file] [question]` — Ask a question about a file\n`/file_write [name] [content]` — Create & download a file _(Leader/Admin)_\n`/file_convert [file] [format]` — Convert file format _(Leader/Admin)_"
+            },
+            {
+                "name": "⚙️ Settings",
+                "value": "`/lang [language]` — Set response language (English / Filipino)\n`/community_suggest [idea]` — Post to #suggestions-box\n`/ai_setup` · `/ai_status` · `/ai_test` · `/ai_clear` · `/ai_tone` _(Admin)_"
+            }
+        ]
+    }
+}

@@ -1,0 +1,28 @@
+# Kairos Discord Bot — Python dependencies
+# Install with: pip install -r requirements.txt
+# Requires Python 3.11+
+
+# ── Discord ────────────────────────────────────────────────────────────────────
+discord.py>=2.4.0
+
+# ── Environment ───────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+
+# ── Async file I/O ────────────────────────────────────────────────────────────
+aiofiles>=23.2.1
+
+# ── HTTP client (OpenAI-compatible providers: openai/openrouter/groq) ─────────
+aiohttp>=3.9.0
+
+# ── AI Providers (install only what you use) ──────────────────────────────────
+# Claude (Anthropic)
+anthropic>=0.25.0
+
+# Gemini (Google)
+google-generativeai>=0.5.0
+
+# ── File conversion (optional — required for /file_convert) ───────────────────
+# pypandoc>=1.13       # Python wrapper for pandoc (pandoc binary must be installed separately)
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+# (No additional runtime deps needed — stdlib covers json, asyncio, datetime, pathlib, etc.)
