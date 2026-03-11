@@ -27,6 +27,7 @@ logs/
 data/history.db
 data/files/
 *.log
+data/
 
 # Extra caches
 .pycache/
