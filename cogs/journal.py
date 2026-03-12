@@ -19,10 +19,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import aiofiles
 import discord
 from discord import app_commands
 from discord.ext import commands
+
+import aiofiles
 
 log = logging.getLogger("kairos.journal")
 

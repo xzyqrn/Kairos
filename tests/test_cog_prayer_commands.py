@@ -81,7 +81,7 @@ class TestPrayerAnswered:
         find_matches.assert_not_awaited()
         interaction.followup.send.assert_awaited()
         message = interaction.followup.send.await_args.args[0]
-        assert "hexadecimal characters and hyphens" in message
+        assert "doesn't look valid" in message
 
 
 class TestPrayerClear:
@@ -109,4 +109,4 @@ class TestPrayerClear:
         find_matches.assert_not_awaited()
         interaction.followup.send.assert_awaited()
         message = interaction.followup.send.await_args.args[0]
-        assert "hexadecimal characters and hyphens" in message
+        assert "doesn't look valid" in message

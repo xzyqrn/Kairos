@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import TypeAlias, TypeGuard
 
 import discord
 from discord import app_commands
@@ -26,6 +27,11 @@ from utils.rate_limiter import handle_cooldown_error
 log = logging.getLogger("kairos.welcome_wall")
 
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "welcome_wall.json"
+_SendableChannel: TypeAlias = discord.TextChannel | discord.Thread
+
+
+def _is_sendable_channel(channel: object) -> TypeGuard[_SendableChannel]:
+    return isinstance(channel, (discord.TextChannel, discord.Thread))
 
 
 async def _load_config() -> dict:
@@ -37,7 +43,11 @@ async def _load_config() -> dict:
         async with aiofiles.open(_CONFIG_PATH, encoding="utf-8") as f:
             raw = await f.read()
         return json.loads(raw) if raw.strip() else {}
-    except Exception:
+    except json.JSONDecodeError as exc:
+        log.warning("welcome_wall config is invalid JSON: %s", exc)
+        return {}
+    except OSError as exc:
+        log.warning("Failed reading welcome_wall config: %s", exc)
         return {}
 
 
@@ -66,7 +76,7 @@ class WelcomeWall(commands.Cog):
             return
 
         channel = member.guild.get_channel(int(channel_id))
-        if not channel:
+        if not isinstance(channel, discord.TextChannel):
             return
 
         embed = discord.Embed(
@@ -156,22 +166,35 @@ class WelcomeWall(commands.Cog):
 
         await interaction.response.defer()
 
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("❌ I couldn't determine which server to post in.")
+            return
+
         guild_id = str(interaction.guild_id)
         config = await _load_config()
         guild_config = config.get(guild_id, {})
         wall_channel_id = guild_config.get("prayer_wall_channel")
+        wall_channel: _SendableChannel
 
         # Use configured channel or the current channel
         if wall_channel_id:
-            wall_channel = interaction.guild.get_channel(int(wall_channel_id))
-            if not wall_channel:
+            configured_channel = guild.get_channel(int(wall_channel_id))
+            if not isinstance(configured_channel, discord.TextChannel):
                 await interaction.followup.send(
                     "❌ The configured prayer wall channel wasn't found. "
                     "Use `/set_prayer_wall_channel` to set a new one."
                 )
                 return
+            wall_channel = configured_channel
         else:
-            wall_channel = interaction.channel
+            current_channel = interaction.channel
+            if not _is_sendable_channel(current_channel):
+                await interaction.followup.send(
+                    "❌ I can only post the prayer wall in a text channel or thread."
+                )
+                return
+            wall_channel = current_channel
 
         open_reqs = await prayer_store.list_open(guild_id)
 
@@ -209,6 +232,7 @@ class WelcomeWall(commands.Cog):
             embed.set_footer(text=f"Showing 10 of {len(open_reqs)} requests")
 
         try:
+            msg: discord.Message
             if wall_channel == interaction.channel:
                 msg = await interaction.followup.send(embed=embed, wait=True)
             else:

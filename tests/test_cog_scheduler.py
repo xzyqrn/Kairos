@@ -5,6 +5,7 @@ tests/test_cog_scheduler.py — Unit tests for manual daily verse posting respon
 from __future__ import annotations
 
 import datetime
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,7 +17,7 @@ import cogs.scheduler as scheduler
 
 def _make_cog() -> scheduler.Scheduler:
     cog = object.__new__(scheduler.Scheduler)
-    cog.bot = MagicMock()
+    cog.bot = cast(Any, SimpleNamespace(guilds=[]))
     return cog
 
 
@@ -113,30 +114,54 @@ class TestRunDueDailyVerses:
         cog = _make_cog()
         guild = MagicMock()
         guild.id = 123
-        cog.bot.guilds = [guild]
+        bot = cast(Any, cog.bot)
+        bot.guilds = [guild]
 
         monkeypatch.setattr(scheduler.scheduler_store, "get_daily_time", AsyncMock(return_value=(7, 30)))
         monkeypatch.setattr(scheduler.scheduler_store, "was_daily_sent", AsyncMock(return_value=False))
         mark_daily_sent = AsyncMock()
         monkeypatch.setattr(scheduler.scheduler_store, "mark_daily_sent", mark_daily_sent)
-        monkeypatch.setattr(cog, "_post_daily_verse", AsyncMock(return_value="sent"))
+        post_daily_verse = AsyncMock(return_value="sent")
+        monkeypatch.setattr(cog, "_post_daily_verse", post_daily_verse)
 
         now = datetime.datetime(2026, 3, 12, 7, 30, tzinfo=scheduler._PHT)
         await cog._run_due_daily_verses(now=now)
 
-        cog._post_daily_verse.assert_awaited_once_with(guild)
+        post_daily_verse.assert_awaited_once_with(guild)
         mark_daily_sent.assert_awaited_once_with("123", "2026-03-12")
 
     async def test_skips_when_time_does_not_match(self, monkeypatch):
         cog = _make_cog()
         guild = MagicMock()
         guild.id = 123
-        cog.bot.guilds = [guild]
+        bot = cast(Any, cog.bot)
+        bot.guilds = [guild]
 
         monkeypatch.setattr(scheduler.scheduler_store, "get_daily_time", AsyncMock(return_value=(7, 0)))
-        monkeypatch.setattr(cog, "_post_daily_verse", AsyncMock())
+        post_daily_verse = AsyncMock()
+        monkeypatch.setattr(cog, "_post_daily_verse", post_daily_verse)
 
         now = datetime.datetime(2026, 3, 12, 7, 1, tzinfo=scheduler._PHT)
         await cog._run_due_daily_verses(now=now)
 
-        cog._post_daily_verse.assert_not_awaited()
+        post_daily_verse.assert_not_awaited()
+
+    async def test_skips_when_daily_verse_was_already_sent(self, monkeypatch):
+        cog = _make_cog()
+        guild = MagicMock()
+        guild.id = 123
+        bot = cast(Any, cog.bot)
+        bot.guilds = [guild]
+
+        monkeypatch.setattr(scheduler.scheduler_store, "get_daily_time", AsyncMock(return_value=(7, 30)))
+        monkeypatch.setattr(scheduler.scheduler_store, "was_daily_sent", AsyncMock(return_value=True))
+        post_daily_verse = AsyncMock()
+        mark_daily_sent = AsyncMock()
+        monkeypatch.setattr(cog, "_post_daily_verse", post_daily_verse)
+        monkeypatch.setattr(scheduler.scheduler_store, "mark_daily_sent", mark_daily_sent)
+
+        now = datetime.datetime(2026, 3, 12, 7, 30, tzinfo=scheduler._PHT)
+        await cog._run_due_daily_verses(now=now)
+
+        post_daily_verse.assert_not_awaited()
+        mark_daily_sent.assert_not_awaited()

@@ -8,10 +8,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-import aiofiles
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+
+import aiofiles
 
 # ── Optional AI provider packages ────────────────────────────────────────────
 # Maps import name → human-readable description + pip install name
