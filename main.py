@@ -35,6 +35,7 @@ EXPECTED_EXTENSIONS = [
     "cogs.bible",
     "cogs.suggestions",
     "cogs.chat",
+    "cogs.chat_listener",
     "cogs.scheduler",
     "cogs.prayer",
     "cogs.quiz",
@@ -43,6 +44,7 @@ EXPECTED_EXTENSIONS = [
     "cogs.sermon",
     "cogs.moderation",
     "cogs.ai_admin",
+    "cogs.welcome_wall",
 ]
 
 
