@@ -1,8 +1,8 @@
 """
-utils/bible_api.py — Fetch Bible verses from scripture.api.bible with a hardcoded fallback.
+utils/bible_api.py — Fetch Bible verses from scripture.api.bible with an offline fallback.
 
 Primary:  scripture.api.bible  (BIBLE_API_KEY + BIBLE_ID from .env)
-Fallback: 8 KJV verses cycling by date ordinal
+Fallback: 8 KJV verses cycling by date ordinal when no API key is configured
 
 Usage:
     from utils.bible_api import fetch_verse
@@ -150,7 +150,13 @@ async def _fetch_api_verse(
 
 
 async def fetch_daily_verse(on_date: datetime.date | None = None) -> BibleVerse:
-    """Fetch the curated daily verse for the given PHT calendar day."""
+    """
+    Fetch the curated daily verse for the given PHT calendar day.
+
+    If ``BIBLE_API_KEY`` is configured, the daily verse must come from the
+    configured Bible API translation. We only fall back to the bundled KJV list
+    when no API key is configured at all.
+    """
     fallback = _daily_fallback(on_date)
     api_key = os.getenv("BIBLE_API_KEY", "").strip()
     bible_id = os.getenv("BIBLE_ID", "de4e12af7f28f599-02").strip()
@@ -160,7 +166,11 @@ async def fetch_daily_verse(on_date: datetime.date | None = None) -> BibleVerse:
         return fallback
 
     api_verse = await _fetch_api_verse(fallback.reference, api_key=api_key, bible_id=bible_id)
-    return api_verse or fallback
+    if api_verse is None:
+        raise RuntimeError(
+            f"Configured daily verse lookup failed for reference '{fallback.reference}' using BIBLE_ID '{bible_id}'."
+        )
+    return api_verse
 
 
 async def fetch_verse(passage: str | None = None) -> BibleVerse | None:
