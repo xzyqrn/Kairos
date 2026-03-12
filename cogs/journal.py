@@ -85,7 +85,10 @@ class JournalView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.requester_id:
-            await interaction.response.send_message("This journal belongs to someone else.", ephemeral=True)
+            await interaction.response.send_message(
+                "Only the person who opened this journal can use these buttons.",
+                ephemeral=True,
+            )
             return False
         return True
 
@@ -148,8 +151,13 @@ class Journal(commands.Cog):
 
     # ── /journal ──────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="journal", description="Write a private devotion journal entry (only you can see it).")
-    @app_commands.describe(entry="Your journal entry — reflections, prayers, what God is teaching you")
+    @app_commands.command(
+        name="journal",
+        description="Save a private journal entry that only you can see.",
+    )
+    @app_commands.describe(
+        entry="Write your prayer, reflection, or what God is teaching you",
+    )
     async def journal(self, interaction: discord.Interaction, entry: str) -> None:
         """
         Write a private devotional journal entry visible only to the calling user.
@@ -192,7 +200,10 @@ class Journal(commands.Cog):
 
     # ── /journal_view ─────────────────────────────────────────────────────────
 
-    @app_commands.command(name="journal_view", description="Browse your past journal entries (private).")
+    @app_commands.command(
+        name="journal_view",
+        description="Read your past private journal entries.",
+    )
     async def journal_view(self, interaction: discord.Interaction) -> None:
         """
         Browse the calling user's past journal entries in a paginated ephemeral view.
@@ -214,7 +225,10 @@ class Journal(commands.Cog):
 
     # ── /journal_clear ────────────────────────────────────────────────────────
 
-    @app_commands.command(name="journal_clear", description="Delete all of your journal entries permanently.")
+    @app_commands.command(
+        name="journal_clear",
+        description="Delete all of your private journal entries.",
+    )
     async def journal_clear(self, interaction: discord.Interaction) -> None:
         """
         Permanently delete all of the calling user's journal entries.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 import discord
@@ -8,6 +9,8 @@ from discord.ext import commands
 
 from utils.ai_client import SUPPORTED_TONES, ai_client, mask_api_key
 from utils.rate_limiter import cooldown, handle_cooldown_error
+
+log = logging.getLogger("kairos.ai_admin")
 
 PROVIDER_LABELS = {
     "claude": "Claude (Anthropic)",
@@ -20,14 +23,14 @@ PROVIDER_LABELS = {
 
 class AISetupModal(discord.ui.Modal, title="Kairos AI Setup"):
     model_input: discord.ui.TextInput[AISetupModal] = discord.ui.TextInput(
-        label="Model Name",
+        label="Model name",
         placeholder="e.g., claude-haiku-4-5, gpt-4.1-mini, gemini-2.0-flash",
         max_length=120,
         required=True,
     )
     api_key_input: discord.ui.TextInput[AISetupModal] = discord.ui.TextInput(
-        label="API Key",
-        placeholder="Paste the API key for the selected provider",
+        label="API key",
+        placeholder="Paste the API key for the provider you picked",
         max_length=300,
         style=discord.TextStyle.short,
         required=True,
@@ -41,13 +44,16 @@ class AISetupModal(discord.ui.Modal, title="Kairos AI Setup"):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.requester_id:
             await interaction.response.send_message(
-                "Only the admin who opened setup can submit this modal.",
+                "Only the admin who opened this setup can submit it.",
                 ephemeral=True,
             )
             return
 
         if interaction.guild is None:
-            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         guild_id = str(interaction.guild.id)
@@ -69,7 +75,11 @@ class AISetupModal(discord.ui.Modal, title="Kairos AI Setup"):
                 tone=tone,
             )
         except Exception as exc:
-            await interaction.response.send_message(f"Failed to save AI config: {exc}", ephemeral=True)
+            log.exception("Failed to save AI config for guild %s: %s", guild_id, exc)
+            await interaction.response.send_message(
+                "⚠️ I couldn't save the AI setup. Please check the model name and API key and try again.",
+                ephemeral=True,
+            )
             return
 
         embed = discord.Embed(title="Kairos AI Updated", color=discord.Color.green())
@@ -90,7 +100,7 @@ class ProviderSelect(discord.ui.Select["AISetupView"]):
             discord.SelectOption(label="Groq", value="groq"),
         ]
         super().__init__(
-            placeholder="Select an AI provider",
+            placeholder="Choose an AI provider to set up",
             min_values=1,
             max_values=1,
             options=options,
@@ -115,7 +125,7 @@ class AISetupView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.requester_id:
             await interaction.response.send_message(
-                "This setup panel belongs to another admin.",
+                "This setup panel was opened by another admin.",
                 ephemeral=True,
             )
             return False
@@ -126,7 +136,10 @@ class AIAdmin(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="ai_setup", description="Configure the AI provider for this server")
+    @app_commands.command(
+        name="ai_setup",
+        description="Set up the AI provider, model, and API key for this server.",
+    )
     @app_commands.checks.has_permissions(administrator=True)
     async def ai_setup(self, interaction: discord.Interaction) -> None:
         """
@@ -140,17 +153,23 @@ class AIAdmin(commands.Cog):
             interaction: The Discord interaction context.
         """
         if interaction.guild is None:
-            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         view = AISetupView(requester_id=interaction.user.id)
         await interaction.response.send_message(
-            "Choose a provider below, then submit model + API key in the modal.",
+            "Choose a provider below, then enter the model name and API key when Kairos asks.",
             view=view,
             ephemeral=True,
         )
 
-    @app_commands.command(name="ai_status", description="Show current AI provider, model, and masked API key")
+    @app_commands.command(
+        name="ai_status",
+        description="See this server's AI provider, model, and current tone.",
+    )
     @app_commands.checks.has_permissions(administrator=True)
     async def ai_status(self, interaction: discord.Interaction) -> None:
         """Display the current AI provider configuration for this server.
@@ -162,13 +181,16 @@ class AIAdmin(commands.Cog):
             interaction: The Discord interaction context.
         """
         if interaction.guild is None:
-            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         config = await ai_client.get_guild_config(str(interaction.guild.id))
         if not config:
             await interaction.response.send_message(
-                "AI is not configured for this server. Run `/ai_setup`.",
+                "AI isn't set up for this server yet. Run `/ai_setup` to get started.",
                 ephemeral=True,
             )
             return
@@ -188,7 +210,10 @@ class AIAdmin(commands.Cog):
         embed.add_field(name="Configured At", value=set_at, inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="ai_test", description="Test AI provider with a one-line encouragement prompt")
+    @app_commands.command(
+        name="ai_test",
+        description="Run a quick test to check that this server's AI setup works.",
+    )
     @app_commands.checks.has_permissions(administrator=True)
     @cooldown("ai_test")
     async def ai_test(self, interaction: discord.Interaction) -> None:
@@ -202,7 +227,10 @@ class AIAdmin(commands.Cog):
             interaction: The Discord interaction context.
         """
         if interaction.guild is None:
-            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -213,13 +241,20 @@ class AIAdmin(commands.Cog):
                 user_id=str(interaction.user.id),
             )
         except Exception as exc:
-            await interaction.followup.send(f"AI test failed: {exc}", ephemeral=True)
+            log.warning("AI test failed for guild %s: %s", interaction.guild.id, exc)
+            await interaction.followup.send(
+                "⚠️ The AI test failed. Please check the saved provider, model, and API key.",
+                ephemeral=True,
+            )
             return
 
         embed = discord.Embed(title="AI Test Response", description=response_text[:4000], color=discord.Color.green())
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="ai_clear", description="Clear this server's AI provider config")
+    @app_commands.command(
+        name="ai_clear",
+        description="Remove this server's saved AI setup.",
+    )
     @app_commands.checks.has_permissions(administrator=True)
     async def ai_clear(self, interaction: discord.Interaction) -> None:
         """Remove the AI provider configuration for this server.
@@ -232,18 +267,30 @@ class AIAdmin(commands.Cog):
             interaction: The Discord interaction context.
         """
         if interaction.guild is None:
-            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         removed = await ai_client.clear_guild_config(str(interaction.guild.id))
         if not removed:
-            await interaction.response.send_message("No AI config was found for this server.", ephemeral=True)
+            await interaction.response.send_message(
+                "There isn't an AI setup saved for this server yet.",
+                ephemeral=True,
+            )
             return
 
-        await interaction.response.send_message("AI config cleared for this server.", ephemeral=True)
+        await interaction.response.send_message(
+            "✅ The saved AI setup was removed for this server.",
+            ephemeral=True,
+        )
 
-    @app_commands.command(name="ai_tone", description="Set Kairos response tone for this server")
-    @app_commands.describe(tone="Choose the tone Kairos should use")
+    @app_commands.command(
+        name="ai_tone",
+        description="Choose how Kairos should sound in this server.",
+    )
+    @app_commands.describe(tone="Pick the tone for Kairos replies in this server")
     @app_commands.checks.has_permissions(administrator=True)
     async def ai_tone(self, interaction: discord.Interaction, tone: Literal["warm", "formal", "balanced"]) -> None:
         """Set the response tone for all AI-generated content in this server.
@@ -257,19 +304,26 @@ class AIAdmin(commands.Cog):
             tone: The desired response tone — "warm", "formal", or "balanced".
         """
         if interaction.guild is None:
-            await interaction.response.send_message("This command must be used in a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         try:
             config = await ai_client.set_tone(str(interaction.guild.id), tone=tone)
         except Exception as exc:
-            await interaction.response.send_message(f"Failed to set tone: {exc}", ephemeral=True)
+            log.exception("Failed to set tone for guild %s: %s", interaction.guild.id, exc)
+            await interaction.response.send_message(
+                "⚠️ I couldn't update the tone right now. Please try again.",
+                ephemeral=True,
+            )
             return
 
         provider = PROVIDER_LABELS.get(str(config.get("provider", "")), str(config.get("provider", "unknown")))
         model = str(config.get("model", "(unset)"))
         await interaction.response.send_message(
-            f"Tone updated to `{tone}` for **{provider}** (`{model}`).",
+            f"✅ Kairos will now use the **{tone}** tone in this server with **{provider}** (`{model}`).",
             ephemeral=True,
         )
 
@@ -279,7 +333,8 @@ class AIAdmin(commands.Cog):
         if isinstance(error, app_commands.MissingPermissions):
             message = "You need Administrator permission to use this command."
         else:
-            message = f"AI admin command error: {error}"
+            log.exception("AI admin command error: %s", error)
+            message = "Something went wrong with that AI admin command. Please try again."
 
         if interaction.response.is_done():
             await interaction.followup.send(message, ephemeral=True)

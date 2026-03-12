@@ -2,11 +2,12 @@
 cogs/scheduler.py — Automated daily/weekly Bible verse posting.
 
 Tasks:
-  • Daily verse   — #daily-verse at 07:00 PHT (UTC+8)  every day
+  • Daily verse   — #daily-verse at a per-server PHT time every day
   • Weekly verse  — #announcements at 08:00 PHT every Sunday (with pin)
 
 Commands (Admin only):
   /send_daily_verse — manual trigger of the daily verse post
+  /daily_verse_time — view or set the server's daily verse time
 """
 
 from __future__ import annotations
@@ -22,12 +23,12 @@ from discord.ext import commands, tasks
 
 from utils.ai_client import ai_client
 from utils.bible_api import fetch_daily_verse
+from utils.scheduler_store import scheduler_store
 
 log = logging.getLogger("kairos.scheduler")
 
 # ── PHT = UTC+8 ───────────────────────────────────────────────────────────────
 _PHT = datetime.timezone(datetime.timedelta(hours=8))
-_DAILY_TIME = datetime.time(hour=7, minute=0, tzinfo=_PHT)
 _WEEKLY_TIME = datetime.time(hour=8, minute=0, tzinfo=_PHT)
 DailyVerseStatus = Literal["sent", "missing_channel", "fetch_failed", "send_failed"]
 
@@ -158,11 +159,25 @@ class Scheduler(commands.Cog):
 
     # ── Scheduled tasks ───────────────────────────────────────────────────────
 
-    @tasks.loop(time=_DAILY_TIME)
-    async def _daily_task(self) -> None:
-        log.info("Running daily verse task for %d guild(s).", len(self.bot.guilds))
+    async def _run_due_daily_verses(self, now: datetime.datetime | None = None) -> None:
+        current = (now or datetime.datetime.now(_PHT)).astimezone(_PHT)
+        today = current.date().isoformat()
+        log.info("Checking daily verse schedules for %d guild(s).", len(self.bot.guilds))
+
         for guild in self.bot.guilds:
-            await self._post_daily_verse(guild)
+            hour, minute = await scheduler_store.get_daily_time(str(guild.id))
+            if current.hour != hour or current.minute != minute:
+                continue
+            if await scheduler_store.was_daily_sent(str(guild.id), today):
+                continue
+
+            status = await self._post_daily_verse(guild)
+            if status == "sent":
+                await scheduler_store.mark_daily_sent(str(guild.id), today)
+
+    @tasks.loop(minutes=1)
+    async def _daily_task(self) -> None:
+        await self._run_due_daily_verses()
 
     @tasks.loop(time=_WEEKLY_TIME)
     async def _weekly_task(self) -> None:
@@ -185,7 +200,7 @@ class Scheduler(commands.Cog):
 
     @app_commands.command(
         name="send_daily_verse",
-        description="(Admin) Manually trigger today's daily verse post.",
+        description="Post today's daily verse now in this server. (Admin)",
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def send_daily_verse(self, interaction: discord.Interaction) -> None:
@@ -199,26 +214,78 @@ class Scheduler(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
         status = await self._post_daily_verse(interaction.guild)
         channel_name = os.getenv("DAILY_VERSE_CHANNEL", "daily-verse")
         messages: dict[DailyVerseStatus, str] = {
-            "sent": "✅ Daily verse posted.",
-            "missing_channel": f"❌ Could not post: no #{channel_name} channel was found.",
-            "fetch_failed": "❌ Could not retrieve today's verse.",
-            "send_failed": "❌ Could not post today's verse. Check the bot permissions and try again.",
+            "sent": "✅ Today's daily verse has been posted.",
+            "missing_channel": f"❌ I couldn't post because this server doesn't have a #{channel_name} channel yet.",
+            "fetch_failed": "❌ I couldn't load today's verse right now.",
+            "send_failed": "❌ I couldn't post today's verse. Please check my channel permissions and try again.",
         }
         await interaction.followup.send(messages[status], ephemeral=True)
+
+    @app_commands.command(
+        name="daily_verse_time",
+        description="View or change when daily verses are posted in this server. (Admin)",
+    )
+    @app_commands.describe(
+        hour="Hour in PHT, from 0 to 23. Leave blank to just view the current time",
+        minute="Minute in PHT, from 0 to 59. If omitted, Kairos uses 00",
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def daily_verse_time(
+        self,
+        interaction: discord.Interaction,
+        hour: int | None = None,
+        minute: int | None = None,
+    ) -> None:
+        if not interaction.guild_id:
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
+            return
+
+        if hour is None:
+            current_hour, current_minute = await scheduler_store.get_daily_time(str(interaction.guild_id))
+            await interaction.response.send_message(
+                f"🕒 Daily verse posts are currently set for **{current_hour:02d}:{current_minute:02d} PHT** in this server.",
+                ephemeral=True,
+            )
+            return
+
+        selected_minute = 0 if minute is None else minute
+        if not (0 <= hour <= 23 and 0 <= selected_minute <= 59):
+            await interaction.response.send_message(
+                "❌ Please use an `hour` from 0-23 and a `minute` from 0-59.",
+                ephemeral=True,
+            )
+            return
+
+        formatted = await scheduler_store.set_daily_time(
+            str(interaction.guild_id),
+            hour,
+            selected_minute,
+        )
+        await interaction.response.send_message(
+            f"✅ Daily verse posts will now go out at **{formatted} PHT** in this server.",
+            ephemeral=True,
+        )
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
         if isinstance(error, app_commands.MissingPermissions):
             await interaction.response.send_message(
-                "❌ Administrator permission required.", ephemeral=True
+                "❌ You need Administrator permission to use this command.",
+                ephemeral=True,
             )
         else:
             log.exception("Scheduler command error: %s", error)

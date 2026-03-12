@@ -98,9 +98,10 @@ class MoodSelect(discord.ui.Select):
                 guild_id=self.guild_id,
                 user_id=self.user_id,
             )
-        except RuntimeError as exc:
+        except RuntimeError:
             await interaction.followup.send(
-                f"❌ Could not generate a response right now: `{exc}`", ephemeral=True
+                "⚠️ I couldn't create a response right now. Please try again in a moment.",
+                ephemeral=True,
             )
             return
 
@@ -133,7 +134,10 @@ class Suggestions(commands.Cog):
 
     # ── /howareyou ────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="howareyou", description="Tell Kairos how you're feeling and receive a biblical response.")
+    @app_commands.command(
+        name="howareyou",
+        description="Share how you're feeling and get a private Bible-based response.",
+    )
     @cooldown("howareyou")
     @guild_rate_limit()
     async def howareyou(self, interaction: discord.Interaction) -> None:
@@ -147,20 +151,28 @@ class Suggestions(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         view = MoodView(guild_id=str(interaction.guild_id), user_id=str(interaction.user.id))
         await interaction.response.send_message(
-            "👋 Hey! Select how you're feeling below and Kairos will respond with a word for you. 💙",
+            "👋 Choose how you're feeling below and Kairos will reply privately with something encouraging. 💙",
             view=view,
             ephemeral=True,
         )
 
     # ── /suggest ──────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="suggest", description="Get 3–5 practical biblical suggestions on a topic.")
-    @app_commands.describe(topic="Topic you want suggestions on, e.g. 'how to pray more', 'dealing with peer pressure'")
+    @app_commands.command(
+        name="suggest",
+        description="Get a few practical, Bible-based ideas for a topic.",
+    )
+    @app_commands.describe(
+        topic="Example: how to pray more, dealing with stress, peer pressure",
+    )
     @cooldown("suggest")
     @guild_rate_limit()
     async def suggest(self, interaction: discord.Interaction, topic: str) -> None:
@@ -175,7 +187,10 @@ class Suggestions(commands.Cog):
             topic: The topic to generate suggestions for.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -195,8 +210,10 @@ class Suggestions(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
-            await interaction.followup.send(f"❌ `{exc}`")
+        except RuntimeError:
+            await interaction.followup.send(
+                "⚠️ I couldn't create suggestions right now. Please try again in a moment."
+            )
             return
 
         embed = discord.Embed(
@@ -209,8 +226,13 @@ class Suggestions(commands.Cog):
 
     # ── /advice ───────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="advice", description="Get personal biblical advice for a situation (private).")
-    @app_commands.describe(situation="Describe your situation — what do you need advice on?")
+    @app_commands.command(
+        name="advice",
+        description="Get private Bible-based advice for a situation you're facing.",
+    )
+    @app_commands.describe(
+        situation="Briefly explain what's going on and what kind of help you need",
+    )
     @cooldown("advice")
     @guild_rate_limit()
     async def advice(self, interaction: discord.Interaction, situation: str) -> None:
@@ -226,7 +248,10 @@ class Suggestions(commands.Cog):
             situation: A description of the situation the user needs advice on.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -246,8 +271,11 @@ class Suggestions(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
-            await interaction.followup.send(f"❌ `{exc}`", ephemeral=True)
+        except RuntimeError:
+            await interaction.followup.send(
+                "⚠️ I couldn't create advice right now. Please try again in a moment.",
+                ephemeral=True,
+            )
             return
 
         embed = discord.Embed(
@@ -262,9 +290,9 @@ class Suggestions(commands.Cog):
 
     @app_commands.command(
         name="community_suggest",
-        description="Post a suggestion to the #suggestions-box channel for the community to vote on.",
+        description="Post an idea for your server in #suggestions-box.",
     )
-    @app_commands.describe(suggestion="Your suggestion for the community or server")
+    @app_commands.describe(suggestion="Your idea for the server or community")
     async def community_suggest(
         self, interaction: discord.Interaction, suggestion: str
     ) -> None:
@@ -279,7 +307,10 @@ class Suggestions(commands.Cog):
             suggestion: The suggestion text to post.
         """
         if not interaction.guild:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         channel = discord.utils.get(interaction.guild.text_channels, name="suggestions-box")
@@ -308,8 +339,11 @@ class Suggestions(commands.Cog):
                 "❌ I don't have permission to post in **#suggestions-box**.", ephemeral=True
             )
             return
-        except discord.HTTPException as exc:
-            await interaction.response.send_message(f"❌ Failed to post: `{exc}`", ephemeral=True)
+        except discord.HTTPException:
+            await interaction.response.send_message(
+                "❌ I couldn't post your suggestion right now. Please try again in a moment.",
+                ephemeral=True,
+            )
             return
 
         # Confirm to the user first — add_reaction errors should not block this
@@ -328,13 +362,13 @@ class Suggestions(commands.Cog):
 
     @app_commands.command(
         name="lang",
-        description="Set your preferred language for Kairos responses.",
+        description="Choose the language Kairos should use when replying to you.",
     )
-    @app_commands.describe(language="Choose your preferred language")
+    @app_commands.describe(language="Pick the language you want Kairos to use")
     @app_commands.choices(
         language=[
             app_commands.Choice(name="English", value="English"),
-            app_commands.Choice(name="Filipino", value="Filipino"),
+            app_commands.Choice(name="Filipino / Tagalog", value="Filipino"),
         ]
     )
     async def lang(self, interaction: discord.Interaction, language: str) -> None:
@@ -356,13 +390,16 @@ class Suggestions(commands.Cog):
 
         await interaction.response.send_message(
             f"✅ Language preference set to **{language}**. "
-            "Kairos will now respond in your chosen language.",
+            "Kairos will now reply in that language when possible.",
             ephemeral=True,
         )
 
     # ── /help ─────────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="help", description="View all Kairos commands grouped by category.")
+    @app_commands.command(
+        name="help",
+        description="See a simple list of commands and what each one does.",
+    )
     async def help(self, interaction: discord.Interaction) -> None:
         """
         Display the full Kairos command reference grouped by category.
@@ -375,96 +412,71 @@ class Suggestions(commands.Cog):
             interaction: The Discord interaction context.
         """
         embed = discord.Embed(
-            title="📖 Kairos — Command Reference",
-            description="A biblically-grounded AI assistant for your Christian youth community.",
+            title="📖 Kairos Commands",
+            description=(
+                "New here? Start with `/dailyverse`, `/ask`, or `/howareyou`.\n"
+                "Many support commands reply only to you."
+            ),
             color=discord.Color.from_rgb(74, 144, 226),
         )
 
         embed.add_field(
-            name="📖 Bible & Devotion",
+            name="🌟 Start Here",
             value=(
-                "`/verse [passage]` — Look up & explain a Bible verse\n"
-                "`/devotion [topic]` — Get a daily devotional\n"
-                "`/pray [topic]` — Personal prayer (private)\n"
-                "`/dailyverse` — Today's verse of the day"
+                "`/dailyverse` — See today's verse and encouragement\n"
+                "`/verse [passage/topic]` — Look up a verse or topic and get a simple explanation\n"
+                "`/devotion [topic]` — Get a short devotional\n"
+                "`/ask [question]` — Ask a Bible, faith, or life question"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="🙏 Prayer",
+            name="💙 Private Support",
             value=(
-                "`/pray_request [request] [anonymous]` — Submit a prayer request\n"
-                "`/pray_list` — View open requests\n"
-                "`/pray_answered [id]` — Mark your request as answered\n"
-                "`/pray_clear [id]` — Delete a request _(Admin)_"
+                "`/howareyou` — Share how you feel and get a private response\n"
+                "`/advice [situation]` — Get private Bible-based advice\n"
+                "`/prayer [topic]` — Get a private personal prayer\n"
+                "`/journal [entry]` — Save a private journal entry\n"
+                "`/journal_view` — Read your private journal entries\n"
+                "`/journal_clear` — Delete your private journal entries\n"
+                "`/clear_history` — Clear Kairos chat memory for you"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="🧠 Quiz",
+            name="🙏 Community",
             value=(
-                "`/quiz` — Bible trivia (30s timer, +10 pts)\n"
-                "`/quiz_leaderboard` — Top 10 scores\n"
-                "`/quiz_reset` — Reset scores _(Admin)_"
+                "`/prayer_request [request] [anonymous]` — Share a prayer request\n"
+                "`/prayer_list` — See open prayer requests\n"
+                "`/prayer_answered [id]` — Mark your request as answered\n"
+                "`/suggest [topic]` — Get practical Bible-based ideas\n"
+                "`/community_suggest [idea]` — Post an idea to #suggestions-box\n"
+                "`/quiz` — Start a Bible trivia question\n"
+                "`/quiz_leaderboard` — See top quiz scores\n"
+                "`/mystats` — See your devotion streak\n"
+                "`/streaks` — See the server's top streaks"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="💙 Mood & Advice",
+            name="⚙️ Settings & Leader Tools",
             value=(
-                "`/howareyou` — Mood check-in with biblical response (private)\n"
-                "`/suggest [topic]` — 3–5 practical biblical suggestions\n"
-                "`/advice [situation]` — Personal advice (private)\n"
-                "`/ask [question]` — Ask Kairos anything"
+                "`/lang [language]` — Choose your reply language\n"
+                "`/daily_verse_time [hour] [minute]` — View or change the daily verse time _(Admin)_\n"
+                "`/send_daily_verse` — Post today's daily verse now _(Admin)_\n"
+                "`/prayer_clear [id]` — Remove a prayer request _(Admin)_\n"
+                "`/quiz_reset` — Reset quiz scores _(Admin)_\n"
+                "`/sermon [topic]` — Create a sermon outline _(Youth Leader / Admin)_\n"
+                "`/sermon_notes [file]` — Summarize sermon notes _(Youth Leader / Admin)_\n"
+                "`/ai_setup`, `/ai_status`, `/ai_test`, `/ai_clear`, `/ai_tone` _(Admin)_"
             ),
             inline=False,
         )
 
-        embed.add_field(
-            name="📝 Sermon & Study",
-            value=(
-                "`/sermon [topic]` — Sermon outline _(Youth Leader / Admin)_\n"
-                "`/sermon_notes [file]` — Summarize sermon notes _(Youth Leader / Admin)_"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="🔥 Streaks & Journal",
-            value=(
-                "`/mystats` — Your devotion streak & stats\n"
-                "`/streaks` — Top 10 devotion streaks\n"
-                "`/journal [entry]` — Write a private journal entry\n"
-                "`/journal_view` — Read your past entries (private)"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="📁 Files",
-            value=(
-                "`/file_read [file]` — AI-summarize an uploaded file\n"
-                "`/file_ask [file] [question]` — Ask a question about a file\n"
-                "`/file_write [name] [content]` — Create & download a file _(Leader/Admin)_\n"
-                "`/file_convert [file] [format]` — Convert file format _(Leader/Admin)_"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name="⚙️ Settings",
-            value=(
-                "`/lang [language]` — Set response language (English / Filipino)\n"
-                "`/community_suggest [idea]` — Post to #suggestions-box\n"
-                "`/ai_setup` · `/ai_status` · `/ai_test` · `/ai_clear` · `/ai_tone` _(Admin)_"
-            ),
-            inline=False,
-        )
-
-        embed.set_footer(text="Kairos — guided by faith, built for community 🕊️")
+        embed.set_footer(text="Kairos is here to make starting simple.")
         await interaction.response.send_message(embed=embed)
 
     # ── Error handler ─────────────────────────────────────────────────────────

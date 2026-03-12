@@ -57,8 +57,13 @@ class Bible(commands.Cog):
 
     # ── /verse ────────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="verse", description="Look up and get an AI explanation of a Bible verse or topic.")
-    @app_commands.describe(passage="e.g. 'John 3:16', 'Psalm 23', 'faith'")
+    @app_commands.command(
+        name="verse",
+        description="Get a Bible verse and a simple explanation you can understand.",
+    )
+    @app_commands.describe(
+        passage="Try: John 3:16, Psalm 23, or a topic like hope",
+    )
     @cooldown("verse")
     @guild_rate_limit()
     async def verse(self, interaction: discord.Interaction, passage: str) -> None:
@@ -73,7 +78,10 @@ class Bible(commands.Cog):
             passage: A Bible reference (e.g. "John 3:16") or topic keyword.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -84,12 +92,12 @@ class Bible(commands.Cog):
         except Exception as exc:
             log.warning("fetch_verse error for '%s': %s", passage, exc)
             await interaction.followup.send(
-                f"❌ Could not find a verse for **{passage}**. Try a different reference.",
+                f"❌ I couldn't find a verse for **{passage}**. Try a Bible reference like `John 3:16`.",
             )
             return
         if bible_verse is None:
             await interaction.followup.send(
-                f"❌ Could not find a verse for **{passage}**. Try a different reference.",
+                f"❌ I couldn't find a verse for **{passage}**. Try a Bible reference like `John 3:16`.",
             )
             return
 
@@ -109,9 +117,9 @@ class Bible(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
+        except RuntimeError:
             await interaction.followup.send(
-                f"❌ AI explanation unavailable: `{exc}`\n\n"
+                "⚠️ I couldn't explain that verse right now, but here's the verse itself.\n\n"
                 + f"> **{bible_verse.reference}** — {bible_verse.text}"
             )
             return
@@ -124,8 +132,13 @@ class Bible(commands.Cog):
 
     # ── /devotion ─────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="devotion", description="Get a short daily devotional, optionally on a topic.")
-    @app_commands.describe(topic="Optional topic, e.g. 'hope', 'forgiveness', 'anxiety'")
+    @app_commands.command(
+        name="devotion",
+        description="Get a short devotional with a verse, reflection, and prayer.",
+    )
+    @app_commands.describe(
+        topic="Optional: a topic like hope, anxiety, forgiveness, or exams",
+    )
     @cooldown("devotion")
     @guild_rate_limit()
     async def devotion(self, interaction: discord.Interaction, topic: str = "") -> None:
@@ -140,7 +153,10 @@ class Bible(commands.Cog):
             topic: Optional topic keyword (e.g. "hope", "forgiveness").
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -162,8 +178,10 @@ class Bible(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
-            await interaction.followup.send(f"❌ Could not generate devotion: `{exc}`")
+        except RuntimeError:
+            await interaction.followup.send(
+                "⚠️ I couldn't create a devotion right now. Please try again in a moment."
+            )
             return
 
         title = f"📅 Daily Devotion{(' — ' + topic.title()) if topic.strip() else ''}"
@@ -179,8 +197,13 @@ class Bible(commands.Cog):
 
     # ── /pray ─────────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="prayer", description="Generate a personal prayer for you (private).")
-    @app_commands.describe(topic="What do you want to pray about? e.g. 'anxiety', 'my family', 'exams'")
+    @app_commands.command(
+        name="prayer",
+        description="Get a short personal prayer that only you can see.",
+    )
+    @app_commands.describe(
+        topic="What would you like prayer for? Example: exams, family, anxiety",
+    )
     @cooldown("prayer")
     @guild_rate_limit()
     async def pray(self, interaction: discord.Interaction, topic: str) -> None:
@@ -195,7 +218,10 @@ class Bible(commands.Cog):
             topic: What the user wants to pray about.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -216,9 +242,10 @@ class Bible(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
+        except RuntimeError:
             await interaction.followup.send(
-                f"❌ Could not generate prayer: `{exc}`", ephemeral=True
+                "⚠️ I couldn't create a prayer right now. Please try again in a moment.",
+                ephemeral=True,
             )
             return
 
@@ -233,7 +260,10 @@ class Bible(commands.Cog):
 
     # ── /dailyverse ───────────────────────────────────────────────────────────
 
-    @app_commands.command(name="dailyverse", description="Get today's Bible verse of the day.")
+    @app_commands.command(
+        name="dailyverse",
+        description="See today's Bible verse with a short encouragement.",
+    )
     @cooldown("dailyverse")
     @guild_rate_limit()
     async def dailyverse(self, interaction: discord.Interaction) -> None:
@@ -247,7 +277,10 @@ class Bible(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -256,7 +289,9 @@ class Bible(commands.Cog):
             verse = await fetch_daily_verse()
         except Exception as exc:
             log.warning("dailyverse fetch error: %s", exc)
-            await interaction.followup.send("❌ Could not retrieve today's verse. Try again shortly.")
+            await interaction.followup.send(
+                "⚠️ I couldn't load today's verse right now. Please try again in a moment."
+            )
             return
 
         embed = _verse_embed(verse.reference, verse.text, verse.source)

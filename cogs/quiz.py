@@ -215,7 +215,10 @@ class Quiz(commands.Cog):
 
     # ── /quiz ─────────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="quiz", description="Get an AI-generated Bible trivia question! 30-second timer.")
+    @app_commands.command(
+        name="quiz",
+        description="Start a Bible trivia question everyone can answer.",
+    )
     @cooldown("quiz")
     @guild_rate_limit()
     async def quiz(self, interaction: discord.Interaction) -> None:
@@ -230,7 +233,10 @@ class Quiz(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -253,8 +259,10 @@ class Quiz(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
-            await interaction.followup.send(f"❌ Could not generate question: `{exc}`")
+        except RuntimeError:
+            await interaction.followup.send(
+                "⚠️ I couldn't create a quiz question right now. Please try again in a moment."
+            )
             return
 
         q = _parse_question(raw)
@@ -308,7 +316,10 @@ class Quiz(commands.Cog):
 
     # ── /quiz_leaderboard ─────────────────────────────────────────────────────
 
-    @app_commands.command(name="quiz_leaderboard", description="View the top 10 Bible quiz scores for this server.")
+    @app_commands.command(
+        name="quiz_leaderboard",
+        description="See the top Bible quiz scores in this server.",
+    )
     async def quiz_leaderboard(self, interaction: discord.Interaction) -> None:
         """
         Display the top 10 Bible quiz scores for this server, sorted by total
@@ -318,7 +329,10 @@ class Quiz(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -327,7 +341,7 @@ class Quiz(commands.Cog):
 
         if not rows:
             await interaction.followup.send(
-                "📊 No quiz scores yet! Use `/quiz` to be the first on the board."
+                "📊 No quiz scores yet. Use `/quiz` to be the first on the leaderboard."
             )
             return
 
@@ -356,7 +370,10 @@ class Quiz(commands.Cog):
 
     # ── /quiz_reset ───────────────────────────────────────────────────────────
 
-    @app_commands.command(name="quiz_reset", description="(Admin) Reset the quiz leaderboard for this server.")
+    @app_commands.command(
+        name="quiz_reset",
+        description="Clear this server's Bible quiz leaderboard. (Admin)",
+    )
     @app_commands.checks.has_permissions(administrator=True)
     async def quiz_reset(self, interaction: discord.Interaction) -> None:
         """
@@ -368,14 +385,20 @@ class Quiz(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
 
         await quiz_store.reset_guild(str(interaction.guild_id))
 
-        await interaction.followup.send("✅ Leaderboard has been reset.", ephemeral=True)
+        await interaction.followup.send(
+            "✅ The Bible quiz leaderboard has been reset for this server.",
+            ephemeral=True,
+        )
 
     # ── Error handler ─────────────────────────────────────────────────────────
 
@@ -385,7 +408,7 @@ class Quiz(commands.Cog):
         if await handle_cooldown_error(interaction, error):
             return
         if isinstance(error, app_commands.MissingPermissions):
-            msg = "❌ Administrator permission required."
+            msg = "❌ You need Administrator permission to use this command."
         else:
             msg = f"❌ `{error}`"
         if interaction.response.is_done():

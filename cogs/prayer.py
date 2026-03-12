@@ -50,7 +50,8 @@ class PrayerListView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.requester_id:
             await interaction.response.send_message(
-                "This list belongs to someone else.", ephemeral=True
+                "Only the person who opened this prayer list can use these buttons.",
+                ephemeral=True,
             )
             return False
         return True
@@ -142,10 +143,13 @@ class Prayer(commands.Cog):
 
     # ── /pray_request ─────────────────────────────────────────────────────────
 
-    @app_commands.command(name="prayer_request", description="Submit a prayer request to the community.")
+    @app_commands.command(
+        name="prayer_request",
+        description="Share a prayer request with the server.",
+    )
     @app_commands.describe(
-        request="Your prayer request",
-        anonymous="Post anonymously? (your name won't be shown)",
+        request="What would you like the community to pray for?",
+        anonymous="Hide your name when other people see this request",
     )
     @cooldown("prayer_request")
     async def prayer_request(
@@ -163,7 +167,10 @@ class Prayer(commands.Cog):
             anonymous: If True, the requester's name is hidden in the list.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -182,15 +189,18 @@ class Prayer(commands.Cog):
         submitter = "anonymously" if anonymous else f"as **{interaction.user.display_name}**"
 
         await interaction.followup.send(
-            f"🙏 Your prayer request has been submitted {submitter}.\n"
-            f"Request ID: `{short_id}` — use this to mark it answered later.\n"
-            f"The community will be praying for you! 💙",
+            f"🙏 Your prayer request was shared {submitter}.\n"
+            f"Request ID: `{short_id}` — keep this so you can mark it answered later.\n"
+            "Your community can now be praying with you. 💙",
             ephemeral=True,
         )
 
     # ── /pray_list ────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="prayer_list", description="View open community prayer requests.")
+    @app_commands.command(
+        name="prayer_list",
+        description="See this server's open prayer requests.",
+    )
     async def prayer_list(self, interaction: discord.Interaction) -> None:
         """
         Display a paginated list of open prayer requests for this server.
@@ -199,7 +209,10 @@ class Prayer(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -212,8 +225,11 @@ class Prayer(commands.Cog):
 
     # ── /pray_answered ────────────────────────────────────────────────────────
 
-    @app_commands.command(name="prayer_answered", description="Mark a prayer request as answered.")
-    @app_commands.describe(request_id="The first 8 characters of the request ID")
+    @app_commands.command(
+        name="prayer_answered",
+        description="Mark your prayer request as answered.",
+    )
+    @app_commands.describe(request_id="Type the short request ID, like a1b2c3d4")
     async def prayer_answered(self, interaction: discord.Interaction, request_id: str) -> None:
         """
         Mark a prayer request as answered.
@@ -225,7 +241,10 @@ class Prayer(commands.Cog):
             request_id: The first 8 characters of the UUID assigned to the request.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -233,11 +252,14 @@ class Prayer(commands.Cog):
         guild_id = str(interaction.guild_id)
         prefix = request_id.strip()
         if not prefix:
-            await interaction.followup.send("❌ Request ID cannot be empty.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Please enter a request ID.",
+                ephemeral=True,
+            )
             return
         if not _is_valid_request_prefix(prefix):
             await interaction.followup.send(
-                "❌ Request ID can only contain hexadecimal characters and hyphens.",
+                "❌ That request ID doesn't look valid. Use the short ID shown when the request was created.",
                 ephemeral=True,
             )
             return
@@ -263,7 +285,8 @@ class Prayer(commands.Cog):
 
         if not is_admin and str(target.get("user_id")) != str(interaction.user.id):
             await interaction.followup.send(
-                "❌ You can only mark your own requests as answered.", ephemeral=True
+                "❌ You can only mark your own prayer requests as answered.",
+                ephemeral=True,
             )
             return
 
@@ -276,14 +299,17 @@ class Prayer(commands.Cog):
             return
 
         await interaction.followup.send(
-            f"🎉 Praise God! Request `{str(target.get('id', ''))[:8]}` has been marked as answered. 🙌",
+            f"🎉 Praise God! Prayer request `{str(target.get('id', ''))[:8]}` is now marked as answered. 🙌",
             ephemeral=True,
         )
 
     # ── /pray_clear ───────────────────────────────────────────────────────────
 
-    @app_commands.command(name="prayer_clear", description="(Admin) Delete a prayer request.")
-    @app_commands.describe(request_id="The first 8 characters of the request ID")
+    @app_commands.command(
+        name="prayer_clear",
+        description="Remove a prayer request from the list. (Admin)",
+    )
+    @app_commands.describe(request_id="Type the short request ID, like a1b2c3d4")
     @app_commands.checks.has_permissions(administrator=True)
     async def prayer_clear(self, interaction: discord.Interaction, request_id: str) -> None:
         """
@@ -296,18 +322,24 @@ class Prayer(commands.Cog):
             request_id: The first 8 characters of the UUID assigned to the request.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
 
         prefix = request_id.strip()
         if not prefix:
-            await interaction.followup.send("❌ Request ID cannot be empty.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ Please enter a request ID.",
+                ephemeral=True,
+            )
             return
         if not _is_valid_request_prefix(prefix):
             await interaction.followup.send(
-                "❌ Request ID can only contain hexadecimal characters and hyphens.",
+                "❌ That request ID doesn't look valid. Use the short ID shown when the request was created.",
                 ephemeral=True,
             )
             return
@@ -336,7 +368,8 @@ class Prayer(commands.Cog):
             return
 
         await interaction.followup.send(
-            f"✅ Request `{str(target.get('id', ''))[:8]}` deleted.", ephemeral=True
+            f"✅ Prayer request `{str(target.get('id', ''))[:8]}` was removed.",
+            ephemeral=True,
         )
 
     # ── Weekly DM reminder ────────────────────────────────────────────────────
@@ -386,7 +419,7 @@ class Prayer(commands.Cog):
         if await handle_cooldown_error(interaction, error):
             return
         if isinstance(error, app_commands.MissingPermissions):
-            msg = "❌ Administrator permission required."
+            msg = "❌ You need Administrator permission to use this command."
         else:
             msg = f"❌ `{error}`"
         if interaction.response.is_done():

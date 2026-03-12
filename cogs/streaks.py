@@ -132,7 +132,10 @@ class Streaks(commands.Cog):
 
     # ── /mystats ──────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="mystats", description="View your personal devotion streak and statistics.")
+    @app_commands.command(
+        name="mystats",
+        description="See your devotion streak and progress.",
+    )
     async def mystats(self, interaction: discord.Interaction) -> None:
         """
         Display the calling user's personal devotion streak, longest streak,
@@ -149,7 +152,7 @@ class Streaks(commands.Cog):
 
         if not entry:
             await interaction.followup.send(
-                "📊 No devotion stats yet!\n"
+                "📊 You don't have devotion stats yet.\n"
                 "Use `/devotion` or `/dailyverse` to start your streak. 🔥",
                 ephemeral=True,
             )
@@ -197,7 +200,10 @@ class Streaks(commands.Cog):
 
     # ── /streaks ──────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="streaks", description="View the top 10 devotion streaks in this server.")
+    @app_commands.command(
+        name="streaks",
+        description="See this server's top devotion streaks.",
+    )
     async def streaks(self, interaction: discord.Interaction) -> None:
         """
         Display the top 10 devotion streaks among members of this server,
@@ -207,7 +213,10 @@ class Streaks(commands.Cog):
             interaction: The Discord interaction context.
         """
         if not interaction.guild:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()

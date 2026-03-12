@@ -42,8 +42,13 @@ class Sermon(commands.Cog):
 
     # ── /sermon ───────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="sermon", description="(Youth Leader/Admin) Generate a sermon outline on a topic.")
-    @app_commands.describe(topic="The sermon topic, e.g. 'The parable of the prodigal son', 'Grace and mercy'")
+    @app_commands.command(
+        name="sermon",
+        description="Create a sermon outline for a topic. (Youth leaders/admins)",
+    )
+    @app_commands.describe(
+        topic="Example: grace and mercy, the prodigal son, or prayer",
+    )
     @cooldown("sermon")
     @guild_rate_limit()
     async def sermon(self, interaction: discord.Interaction, topic: str) -> None:
@@ -59,12 +64,16 @@ class Sermon(commands.Cog):
             topic: The sermon topic to generate an outline for.
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         if not _has_leader_role(interaction):
             await interaction.response.send_message(
-                "❌ This command is restricted to **Youth Leaders** and **Admins**.", ephemeral=True
+                "❌ This command is for **Youth Leaders** and **Admins** only.",
+                ephemeral=True,
             )
             return
 
@@ -98,8 +107,10 @@ class Sermon(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
-            await interaction.followup.send(f"❌ Could not generate sermon outline: `{exc}`")
+        except RuntimeError:
+            await interaction.followup.send(
+                "⚠️ I couldn't create a sermon outline right now. Please try again in a moment."
+            )
             return
 
         embed = discord.Embed(
@@ -115,9 +126,9 @@ class Sermon(commands.Cog):
 
     @app_commands.command(
         name="sermon_notes",
-        description="(Youth Leader/Admin) Upload and AI-summarize your sermon notes (.txt or .md).",
+        description="Upload sermon notes and get a simple summary. (Youth leaders/admins)",
     )
-    @app_commands.describe(file="Your sermon notes file (.txt or .md, max 5MB)")
+    @app_commands.describe(file="Upload a .txt or .md file with your sermon notes (max 5 MB)")
     @cooldown("sermon_notes")
     @guild_rate_limit()
     async def sermon_notes(
@@ -135,12 +146,16 @@ class Sermon(commands.Cog):
             file: The sermon notes attachment (.txt or .md, max 5MB).
         """
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         if not _has_leader_role(interaction):
             await interaction.response.send_message(
-                "❌ This command is restricted to **Youth Leaders** and **Admins**.", ephemeral=True
+                "❌ This command is for **Youth Leaders** and **Admins** only.",
+                ephemeral=True,
             )
             return
 
@@ -166,8 +181,10 @@ class Sermon(commands.Cog):
         try:
             raw_bytes = await file.read()
             content = raw_bytes.decode("utf-8", errors="replace")
-        except Exception as exc:
-            await interaction.followup.send(f"❌ Could not read the file: `{exc}`")
+        except Exception:
+            await interaction.followup.send(
+                "⚠️ I couldn't read that file. Please check the file and try again."
+            )
             return
 
         if len(content.strip()) < 10:
@@ -203,8 +220,10 @@ class Sermon(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
-            await interaction.followup.send(f"❌ AI error: `{exc}`")
+        except RuntimeError:
+            await interaction.followup.send(
+                "⚠️ I couldn't summarize those sermon notes right now. Please try again in a moment."
+            )
             return
 
         embed = discord.Embed(

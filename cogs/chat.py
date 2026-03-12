@@ -165,13 +165,21 @@ class Chat(commands.Cog):
 
     # ── /ask ─────────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="ask", description="Ask Kairos anything — Bible, faith, life questions.")
-    @app_commands.describe(question="Your question for Kairos")
+    @app_commands.command(
+        name="ask",
+        description="Ask Kairos a Bible, faith, or life question in plain language.",
+    )
+    @app_commands.describe(
+        question="Ask anything, like 'How do I pray?' or 'What is grace?'",
+    )
     @cooldown("ask")
     @guild_rate_limit()
     async def ask(self, interaction: discord.Interaction, question: str) -> None:
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -186,8 +194,10 @@ class Chat(commands.Cog):
                 guild_id=str(interaction.guild_id),
                 user_id=str(interaction.user.id),
             )
-        except RuntimeError as exc:
-            await interaction.followup.send(f"❌ `{exc}`")
+        except RuntimeError:
+            await interaction.followup.send(
+                "⚠️ I'm having trouble reaching my AI provider right now. Please try again in a moment."
+            )
             return
 
         await history_store.push(
@@ -213,11 +223,14 @@ class Chat(commands.Cog):
 
     @app_commands.command(
         name="clear_history",
-        description="Clear your conversation history with Kairos.",
+        description="Clear the past chat messages Kairos remembers for you.",
     )
     async def clear_history(self, interaction: discord.Interaction) -> None:
         if not interaction.guild_id:
-            await interaction.response.send_message("Use this inside a server.", ephemeral=True)
+            await interaction.response.send_message(
+                "Please use this command in a server channel.",
+                ephemeral=True,
+            )
             return
 
         deleted = await history_store.clear(
@@ -226,12 +239,12 @@ class Chat(commands.Cog):
         )
         if deleted:
             await interaction.response.send_message(
-                "✅ Your conversation history with Kairos has been cleared.",
+                "✅ I cleared your saved chat history with Kairos.",
                 ephemeral=True,
             )
         else:
             await interaction.response.send_message(
-                "ℹ️ You have no conversation history to clear.",
+                "ℹ️ There isn't any saved chat history to clear yet.",
                 ephemeral=True,
             )
 
