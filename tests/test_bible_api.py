@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import datetime
 
-import pytest
-
 import utils.bible_api as bible_api
 from utils.bible_api import BibleVerse
 
@@ -47,8 +45,9 @@ class TestFetchDailyVerse:
 
         assert result == fallback
 
-    async def test_raises_when_api_returns_none_with_api_key(self, monkeypatch):
+    async def test_falls_back_when_api_returns_none_with_api_key(self, monkeypatch):
         target_date = datetime.date(2026, 3, 11)
+        fallback = bible_api.get_fallback_verse(on_date=target_date)
 
         async def fake_fetch(*args, **kwargs) -> BibleVerse | None:
             return None
@@ -56,8 +55,9 @@ class TestFetchDailyVerse:
         monkeypatch.setenv("BIBLE_API_KEY", "secret")
         monkeypatch.setattr(bible_api, "_fetch_api_verse", fake_fetch)
 
-        with pytest.raises(RuntimeError, match="Configured daily verse lookup failed"):
-            await bible_api.fetch_daily_verse(on_date=target_date)
+        result = await bible_api.fetch_daily_verse(on_date=target_date)
+
+        assert result == fallback
 
 
 class TestFetchVerse:

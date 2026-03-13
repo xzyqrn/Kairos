@@ -153,9 +153,10 @@ async def fetch_daily_verse(on_date: datetime.date | None = None) -> BibleVerse:
     """
     Fetch the curated daily verse for the given PHT calendar day.
 
-    If ``BIBLE_API_KEY`` is configured, the daily verse must come from the
-    configured Bible API translation. We only fall back to the bundled KJV list
-    when no API key is configured at all.
+    If ``BIBLE_API_KEY`` is configured, we try to fetch the curated verse from
+    the configured Bible API translation first. If the API is unavailable or
+    credentials are invalid, gracefully fall back to the bundled KJV list so
+    ``/dailyverse`` and scheduled posts still work.
     """
     fallback = _daily_fallback(on_date)
     api_key = os.getenv("BIBLE_API_KEY", "").strip()
@@ -167,9 +168,12 @@ async def fetch_daily_verse(on_date: datetime.date | None = None) -> BibleVerse:
 
     api_verse = await _fetch_api_verse(fallback.reference, api_key=api_key, bible_id=bible_id)
     if api_verse is None:
-        raise RuntimeError(
-            f"Configured daily verse lookup failed for reference '{fallback.reference}' using BIBLE_ID '{bible_id}'."
+        log.warning(
+            "Configured daily verse lookup failed for reference '%s' using BIBLE_ID '%s' — using fallback.",
+            fallback.reference,
+            bible_id,
         )
+        return fallback
     return api_verse
 
 
