@@ -119,9 +119,11 @@ class KairosBot(commands.Bot):
         _probe_optional_deps(self.logger)
 
         # Pre-warm SQLite stores (creates tables if not present — idempotent)
+        from utils.channel_memory_store import channel_memory_store
         from utils.prayer_store import prayer_store
         from utils.quiz_store import quiz_store
         from utils.streak_store import streak_store
+        await channel_memory_store._ensure_ready()
         await prayer_store._ensure_ready()
         await quiz_store._ensure_ready()
         await streak_store._ensure_ready()

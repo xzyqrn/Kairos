@@ -28,7 +28,9 @@ def tmp_locale_dir(tmp_path: Path) -> Path:
                 {"emoji": "😢", "label": "Sad",   "context": "the user is sad"}
             ],
             "prompts": {
-                "howareyou": "A Christian is reaching out because {mood_context}."
+                "howareyou": "A Christian is reaching out because {mood_context}.",
+                "mention_chat": "[Long-term channel memory:]\\n{long_term_memory}\\n\\n[Recent channel context:]\\n{recent_context}\\n\\n[Current message addressed to Kairos:]\\n{current_message}",
+                "channel_memory_rollup": "[Previous long-term memory:]\\n{previous_summary}\\n\\n[Latest discussion to fold in:]\\n{recent_discussion}"
             },
             "ui": {
                 "howareyou_embed_title": "💙 A Word for You",

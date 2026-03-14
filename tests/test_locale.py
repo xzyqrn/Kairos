@@ -165,7 +165,16 @@ class TestProductionLocale:
 
     def test_all_prompts_nonempty(self):
         from utils.locale import locale
-        for key in ("howareyou", "suggest", "advice", "verse", "devotion", "pray"):
+        for key in (
+            "howareyou",
+            "suggest",
+            "advice",
+            "verse",
+            "devotion",
+            "pray",
+            "mention_chat",
+            "channel_memory_rollup",
+        ):
             assert locale.prompt(key), f"Prompt '{key}' is empty in production locale"
 
     def test_help_fields_count(self):

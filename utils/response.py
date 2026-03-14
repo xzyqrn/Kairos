@@ -26,6 +26,8 @@ _COMMAND_CAPS: dict[str, int] = {
     "pray":      800,
     "sermon":    2_000,
     "ask":       1_800,
+    "mention_chat": 1_800,
+    "channel_memory": 1_200,
 }
 
 # Discord embed description hard limit.
